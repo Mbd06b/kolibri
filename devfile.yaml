@@ -1,0 +1,53 @@
+schemaVersion: 2.1.0
+metadata:
+  name: react-web-app
+components:
+  - name: tools
+    container:
+      image: quay.io/devfile/universal-developer-image:ubi8-latest
+      endpoints:
+        - exposure: public
+          name: nodejs
+          protocol: http
+          targetPort: 3000
+      memoryLimit: 1G
+      mountSources: true
+
+commands:
+  - id: install-dependencies
+    exec:
+      label: "Install all required dependencies"
+      component: tools
+      workingDir: ${PROJECT_SOURCE}
+      commandLine: "yarn install"
+      group:
+        kind: build
+        isDefault: true
+
+  - id: build
+    exec:
+      label: "Build the app"
+      component: tools
+      workingDir: ${PROJECT_SOURCE}
+      commandLine: "yarn build"
+      group:
+        kind: build
+        isDefault: true
+
+  - id: run
+    exec:
+      label: "Run the web app"
+      component: tools
+      workingDir: ${PROJECT_SOURCE}
+      commandLine: "yarn start"
+      group:
+        kind: run
+
+  - id: test
+    exec:
+      label: "Launch tests"
+      component: tools
+      workingDir: ${PROJECT_SOURCE}
+      commandLine: "yarn test"
+      group:
+        kind: test
