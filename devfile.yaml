@@ -1,6 +1,11 @@
 schemaVersion: 2.1.0
 metadata:
-  name: react-web-app
+  name: kolibri
+projects:
+  - name: kolibri
+    git:
+      remotes:
+        origin: "https://github.com/Mbd06b/kolibri.git"
 components:
   - name: tools
     container:
