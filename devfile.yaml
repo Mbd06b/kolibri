@@ -12,9 +12,9 @@ components:
       image: quay.io/devfile/universal-developer-image:ubi8-latest
       endpoints:
         - exposure: public
-          name: nodejs
+          name: serverport
           protocol: http
-          targetPort: 3000
+          targetPort: 8000
       memoryLimit: 1G
       mountSources: true
 
@@ -44,7 +44,7 @@ commands:
       label: "Run the web app"
       component: tools
       workingDir: ${PROJECT_SOURCE}
-      commandLine: "yarn start"
+      commandLine: "yarn run devserver"
       group:
         kind: run
 
