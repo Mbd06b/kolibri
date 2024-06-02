@@ -3,7 +3,6 @@
   <CoachAppBarPage
     :authorized="$store.getters.userIsAuthorizedForCoach"
     authorizedRole="adminOrCoach"
-    :showSubNav="true"
   >
 
     <KGrid gutter="16">
@@ -119,7 +118,10 @@
       /* eslint-disable-next-line kolibri/vue-no-unused-vuex-properties */
       ...mapState('classSummary', ['groupMap', 'learnerMap']),
       selectedQuestions() {
-        return this.quiz.question_sources;
+        return this.quiz.question_sources.reduce((acc, section) => {
+          acc = [...acc, ...section.questions];
+          return acc;
+        }, []);
       },
       quizIsRandomized() {
         return !this.quiz.learners_see_fixed_order;

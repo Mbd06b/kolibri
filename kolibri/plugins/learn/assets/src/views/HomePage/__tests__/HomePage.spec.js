@@ -2,9 +2,9 @@ import { mount, createLocalVue } from '@vue/test-utils';
 import VueRouter from 'vue-router';
 import Vuex from 'vuex';
 
-import { useDevicesWithFacility } from 'kolibri.coreVue.componentSets.sync';
+import { useDevicesWithFilter } from 'kolibri.coreVue.componentSets.sync';
 import useUser, { useUserMock } from 'kolibri.coreVue.composables.useUser';
-import useKResponsiveWindow from 'kolibri-design-system/lib/useKResponsiveWindow';
+import useKResponsiveWindow from 'kolibri-design-system/lib/composables/useKResponsiveWindow';
 import { ClassesPageNames, PageNames } from '../../../constants';
 import HomePage from '../index';
 /* eslint-disable import/named */
@@ -24,7 +24,7 @@ jest.mock('../../../composables/useLearnerResources');
 jest.mock('../../../composables/useContentLink');
 // Needed to test anything using mount() where children use this composable
 jest.mock('../../../composables/useLearningActivities');
-jest.mock('kolibri-design-system/lib/useKResponsiveWindow');
+jest.mock('kolibri-design-system/lib/composables/useKResponsiveWindow');
 
 const localVue = createLocalVue();
 localVue.use(Vuex);
@@ -70,7 +70,7 @@ function makeWrapper() {
   return mount(HomePage, {
     localVue,
     router,
-    stubs: ['SideNav', 'LearnTopNav'],
+    stubs: ['SideNav'],
     store: mockStore,
   });
 }
@@ -112,7 +112,7 @@ describe(`HomePage`, () => {
     useUser.mockImplementation(() => useUserMock());
     useDeviceSettings.mockImplementation(() => useDeviceSettingsMock());
     useLearnerResources.mockImplementation(() => useLearnerResourcesMock());
-    useDevicesWithFacility.mockReturnValue({
+    useDevicesWithFilter.mockReturnValue({
       devices: [
         {
           id: '1',

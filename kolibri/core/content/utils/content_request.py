@@ -8,6 +8,7 @@ from django.db.models import BooleanField
 from django.db.models import Case
 from django.db.models import Exists
 from django.db.models import OuterRef
+from django.db.models import Q
 from django.db.models import QuerySet
 from django.db.models import Subquery
 from django.db.models import Sum
@@ -22,6 +23,7 @@ from kolibri.core.auth.models import FacilityUser
 from kolibri.core.content.models import ContentDownloadRequest
 from kolibri.core.content.models import ContentNode
 from kolibri.core.content.models import ContentRemovalRequest
+from kolibri.core.content.models import ContentRequest
 from kolibri.core.content.models import ContentRequestReason
 from kolibri.core.content.models import ContentRequestStatus
 from kolibri.core.content.models import File
@@ -43,7 +45,9 @@ from kolibri.core.discovery.utils.network.client import NetworkClient
 from kolibri.core.discovery.utils.network.connections import capture_connection_state
 from kolibri.core.discovery.utils.network.errors import NetworkLocationResponseFailure
 from kolibri.core.utils.urls import reverse_path
+from kolibri.utils.conf import OPTIONS
 from kolibri.utils.data import bytes_for_humans
+from kolibri.utils.file_transfer import ChunkedFileDirectoryManager
 
 
 logger = logging.getLogger(__name__)
@@ -58,18 +62,6 @@ INCOMPLETE_STATUSES = [
 
 def _uuid_to_hex(_uuid):
     return _uuid.hex if isinstance(_uuid, uuid.UUID) else uuid.UUID(_uuid).hex
-
-
-class FixedExists(Exists):
-    """
-    Exists() subquery that allows positional arguments, to get around issue:
-    TypeError: resolve_expression() takes from 1 to 2 positional arguments but 6 were given
-    """
-
-    def resolve_expression(self, query=None, *args, **kwargs):
-        # @see Exists.resolve_expression
-        self.queryset = self.queryset.order_by()
-        return Subquery.resolve_expression(self, query, *args, **kwargs)
 
 
 def create_content_download_requests(facility, assignments, source_instance_id=None):
@@ -91,6 +83,7 @@ def create_content_download_requests(facility, assignments, source_instance_id=N
         # delete any related removal requests
         related_removals.delete()
 
+        logger.debug("Creating content download request for {}".format(assignment))
         ContentDownloadRequest.objects.get_or_create(
             defaults=dict(
                 facility_id=facility.id,
@@ -128,6 +121,9 @@ def create_content_removal_requests(facility, removable_assignments):
             removed_contentnode_ids = [assignment.contentnode_id]
 
         for contentnode_id in removed_contentnode_ids:
+            logger.debug(
+                "Creating content removal request for {}".format(contentnode_id)
+            )
             ContentRemovalRequest.objects.get_or_create(
                 defaults=dict(
                     facility_id=facility.id,
@@ -187,10 +183,11 @@ def synchronize_content_requests(dataset_id, transfer_session=None):
             else sync_session.server_instance_id
         )
 
+    # process removals first
+    create_content_removal_requests(facility, removable_assignments)
     create_content_download_requests(
         facility, assignments, source_instance_id=source_instance_id
     )
-    create_content_removal_requests(facility, removable_assignments)
 
 
 class PreferredDevices(object):
@@ -243,11 +240,23 @@ class PreferredDevices(object):
         :return: The NetworkLocation object, or None if it is not available or does not match the
                  validation conditions
         """
-        try:
-            peer = NetworkLocation.objects.get(
-                instance_id=_uuid_to_hex(instance_id), **self._filters
+        peer = (
+            NetworkLocation.objects.annotate(
+                okay=Case(
+                    When(
+                        connection_status=ConnectionStatus.Okay,
+                        then=Value(True),
+                    ),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                ),
             )
-        except NetworkLocation.DoesNotExist:
+            .order_by("-okay")
+            .filter(instance_id=_uuid_to_hex(instance_id), **self._filters)
+            .first()
+        )
+
+        if not peer:
             return None
 
         # if we're on a metered connection, we only want to download from local peers
@@ -404,7 +413,7 @@ def incomplete_downloads_queryset():
             is_learner_download=Case(
                 When(
                     source_model=FacilityUser.morango_model_name,
-                    then=FixedExists(
+                    then=Exists(
                         FacilityUser.objects.filter(
                             id=OuterRef("source_id"),
                             roles__isnull=True,
@@ -506,7 +515,7 @@ def _get_import_metadata(client, contentnode_id):
         return response.json()
     except NetworkLocationResponseFailure as e:
         # 400 level errors, like 404, are ignored
-        if e.response and 400 <= e.response.status_code < 500:
+        if e.response is not None and 400 <= e.response.status_code < 500:
             logger.debug(
                 "Metadata request failure: GET {} {}".format(
                     url_path, e.response.status_code
@@ -563,7 +572,9 @@ def process_metadata_import(incomplete_downloads_without_metadata):
     preferred_instance_ids = list(
         incomplete_downloads_without_metadata.values_list(
             "source_instance_id", flat=True
-        ).distinct()
+        )
+        # Remove any ordering to ensure the distinct makes the list properly unique.
+        .order_by().distinct()
     )
     version_filter = ">=0.16.0"
     preferred_peers = PreferredDevicesWithClient(
@@ -639,8 +650,8 @@ def incomplete_removals_queryset():
         )
         .exclude(
             # hoping using exclude creates SQL like `NOT EXISTS`
-            has_other_download=True,
-            is_admin_imported=True,
+            Q(has_other_download=True)
+            | Q(is_admin_imported=True)
         )
         .order_by("requested_at")
     )
@@ -663,6 +674,7 @@ def _process_content_requests(incomplete_downloads):
     has_processed_sync_removals = False
     has_processed_user_removals = False
     has_processed_user_downloads = False
+    has_freed_space_in_stream_cache = False
     qs = incomplete_downloads_with_metadata.all()
 
     # loop while we have pending downloads
@@ -709,6 +721,16 @@ def _process_content_requests(incomplete_downloads):
                 # process, then repeat
                 has_processed_user_downloads = True
                 process_user_downloads_for_removal()
+                continue
+            if not has_freed_space_in_stream_cache:
+                # try to clear space, then repeat
+                has_freed_space_in_stream_cache = True
+                chunked_file_manager = ChunkedFileDirectoryManager(
+                    OPTIONS["Paths"]["CONTENT_DIR"]
+                )
+                chunked_file_manager.evict_files(
+                    calc.get_additional_free_space_needed()
+                )
                 continue
             raise InsufficientStorage(
                 "Content download requests need {} of free space".format(
@@ -852,16 +874,17 @@ def process_user_downloads_for_removal():
     largest_user_download = user_downloads.order_by("-total_size").first()
 
     # adding this opposite of the user download request allows us to detect this situation
-    user_download_removal = ContentRemovalRequest(
-        facility_id=largest_user_download.facility_id,
+    # this removal request will be processed on the next loop
+    ContentRemovalRequest.objects.update_or_create(
         source_model=largest_user_download.source_model,
         source_id=largest_user_download.source_id,
-        reason=ContentRequestReason.SyncInitiated,
-        status=ContentRequestStatus.Pending,
         contentnode_id=largest_user_download.contentnode_id,
+        defaults=dict(
+            facility_id=largest_user_download.facility_id,
+            reason=ContentRequestReason.SyncInitiated,
+            status=ContentRequestStatus.Pending,
+        ),
     )
-    # this removal request will be processed on the next loop
-    user_download_removal.save()
     logger.info(
         "Added removal request for user download of {}".format(
             largest_user_download.contentnode_id
@@ -915,6 +938,10 @@ def process_content_removal_requests(queryset):
         contentnode_ids = list(
             removable_nodes.filter(channel_id=channel_id).values_list("id", flat=True)
         )
+        # if we somehow have no contentnode_ids, skip, because the deletecontent command will
+        # delete all content for the channel if no node ids are passed
+        if not contentnode_ids:
+            continue
         # queryset unfiltered by status
         channel_requests = ContentRemovalRequest.objects.filter(
             id__in=list(
@@ -930,6 +957,7 @@ def process_content_removal_requests(queryset):
                 channel_id,
                 node_ids=contentnode_ids,
                 ignore_admin_flags=True,
+                update_content_requests=False,
             )
             # mark all as completed
             channel_requests.update(status=ContentRequestStatus.Completed)
@@ -944,6 +972,27 @@ def process_content_removal_requests(queryset):
     remaining_pending = queryset.filter(status=ContentRequestStatus.Pending)
     _remove_corresponding_download_requests(remaining_pending)
     remaining_pending.update(status=ContentRequestStatus.Completed)
+
+
+def propagate_contentnode_removal(contentnode_ids):
+    """
+    Deletes all learner initiated ContentRequests for the passed in contentnode_ids
+    Matching learner initiated ContentRequests will be deleted - this means that if
+    resources are deleted by an admin, we remove any associated learner initiated requests.
+    Also updates the status of any COMPLETED non-learner initiated ContentDownloadRequests to PENDING
+    """
+    BATCH_SIZE = 250
+    for i in range(0, len(contentnode_ids), BATCH_SIZE):
+        batch = contentnode_ids[i : i + BATCH_SIZE]
+        ContentRequest.objects.filter(
+            contentnode_id__in=batch, reason=ContentRequestReason.UserInitiated
+        ).delete()
+        ContentDownloadRequest.objects.filter(
+            contentnode_id__in=batch,
+            status=ContentRequestStatus.Completed,
+        ).exclude(reason=ContentRequestReason.UserInitiated).update(
+            status=ContentRequestStatus.Pending
+        )
 
 
 class StorageCalculator:
@@ -970,12 +1019,13 @@ class StorageCalculator:
             total_size=_total_size_annotation(available=True),
         )
         self.free_space = 0
+        self.incomplete_downloads_size = 0
 
     def _calculate_space_available(self):
+        self.incomplete_downloads_size = _total_size(self.incomplete_downloads)
         free_space = get_free_space_for_downloads(
             completed_size=_total_size(completed_downloads_queryset())
         )
-        free_space -= _total_size(self.incomplete_downloads)
         free_space += _total_size(self.incomplete_sync_removals)
         free_space += _total_size(self.incomplete_user_removals)
         free_space += _total_size(self.complete_user_downloads)
@@ -984,4 +1034,8 @@ class StorageCalculator:
 
     def is_space_sufficient(self):
         self._calculate_space_available()
-        return self.free_space > _total_size(self.incomplete_downloads)
+        return self.free_space > self.incomplete_downloads_size
+
+    def get_additional_free_space_needed(self):
+        self._calculate_space_available()
+        return self.incomplete_downloads_size - self.free_space

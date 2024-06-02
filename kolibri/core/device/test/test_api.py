@@ -17,6 +17,7 @@ from morango.models import InstanceIDModel
 from morango.models import SyncSession
 from morango.models import TransferSession
 from rest_framework import status
+from rest_framework.test import APIClient
 from rest_framework.test import APITestCase
 
 import kolibri
@@ -32,11 +33,14 @@ from kolibri.core.auth.test.test_api import ClassroomFactory
 from kolibri.core.auth.test.test_api import FacilityFactory
 from kolibri.core.auth.test.test_api import FacilityUserFactory
 from kolibri.core.content.models import ContentDownloadRequest
+from kolibri.core.content.models import ContentRemovalRequest
+from kolibri.core.content.models import ContentRequestReason
 from kolibri.core.device.models import DevicePermissions
 from kolibri.core.device.models import DeviceSettings
 from kolibri.core.device.models import DeviceStatus
 from kolibri.core.device.models import LearnerDeviceStatus
 from kolibri.core.device.models import StatusSentiment
+from kolibri.core.device.models import SyncQueueStatus
 from kolibri.core.device.models import UserSyncStatus
 from kolibri.core.public.constants import user_sync_statuses
 from kolibri.core.public.constants.user_sync_options import DELAYED_SYNC
@@ -581,7 +585,7 @@ class UserSyncStatusTestCase(APITestCase):
         data1 = {
             "user_id": cls.user1.id,
             "sync_session": cls.syncsession1,
-            "queued": True,
+            "status": SyncQueueStatus.Queued,
         }
         cls.syncstatus1 = UserSyncStatus.objects.create(**data1)
 
@@ -599,7 +603,7 @@ class UserSyncStatusTestCase(APITestCase):
         data2 = {
             "user_id": cls.user2.id,
             "sync_session": cls.syncsession2,
-            "queued": False,
+            "status": SyncQueueStatus.Pending,
         }
         cls.syncstatus2 = UserSyncStatus.objects.create(**data2)
 
@@ -753,7 +757,7 @@ class UserSyncStatusTestCase(APITestCase):
             password=DUMMY_PASSWORD,
             facility=self.facility,
         )
-        self.syncstatus1.queued = False
+        self.syncstatus1.status = SyncQueueStatus.Pending
         self.syncstatus1.save()
         self._create_transfer_session(
             active=False,
@@ -819,7 +823,7 @@ class UserSyncStatusTestCase(APITestCase):
             password=DUMMY_PASSWORD,
             facility=self.facility,
         )
-        self.syncstatus1.queued = False
+        self.syncstatus1.status = SyncQueueStatus.Pending
         self.syncstatus1.save()
         last_sync = timezone.now() - timedelta(seconds=DELAYED_SYNC * 2)
         self.syncsession1.last_activity_timestamp = last_sync
@@ -842,7 +846,7 @@ class UserSyncStatusTestCase(APITestCase):
             password=DUMMY_PASSWORD,
             facility=self.facility,
         )
-        self.syncstatus1.queued = False
+        self.syncstatus1.status = SyncQueueStatus.Pending
         previous_sync_session = self.syncstatus1.sync_session
         self.syncstatus1.sync_session = None
         self.syncstatus1.save()
@@ -929,10 +933,92 @@ class UserSyncStatusTestCase(APITestCase):
         device_status = self._create_device_status("oopsie", StatusSentiment.Neutral)
         self.syncsession1.client_instance_id = device_status.instance_id
         self.syncsession1.save()
-        response = self.client.get(reverse("kolibri:core:usersyncstatus-list"))
         content_request.save()
+        response = self.client.get(reverse("kolibri:core:usersyncstatus-list"))
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["user"], self.user1.id)
         self.assertEqual(response.data[0]["status"], user_sync_statuses.RECENTLY_SYNCED)
-        self.assertFalse(response.data[0]["has_downloads"])
+        self.assertTrue(response.data[0]["has_downloads"])
         self.assertIsNone(response.data[0]["last_download_removed"])
+
+    def test_downloads_queryset__content_request_removed(self):
+        self.client.login(
+            username=self.user1.username,
+            password=DUMMY_PASSWORD,
+            facility=self.facility,
+        )
+        self._create_transfer_session(
+            active=False,
+        )
+        content_request = ContentDownloadRequest.build_for_user(self.user1)
+        content_request.contentnode_id = uuid.uuid4().hex
+        content_request.save()
+        content_removal_request = ContentRemovalRequest.build_for_user(self.user1)
+        content_removal_request.contentnode_id = content_request.contentnode_id
+        content_removal_request.save()
+        response = self.client.get(reverse("kolibri:core:usersyncstatus-list"))
+        self.assertFalse(response.data[0]["has_downloads"])
+
+    def test_downloads_queryset__sync_downloads_in_progress(self):
+        self.client.login(
+            username=self.user1.username,
+            password=DUMMY_PASSWORD,
+            facility=self.facility,
+        )
+        self._create_transfer_session(
+            active=False,
+        )
+        content_request = ContentDownloadRequest.build_for_user(self.user1)
+        content_request.contentnode_id = uuid.uuid4().hex
+        content_request.reason = ContentRequestReason.SyncInitiated
+        content_request.save()
+        response = self.client.get(reverse("kolibri:core:usersyncstatus-list"))
+        self.assertTrue(response.data[0]["sync_downloads_in_progress"])
+
+    def test_downloads_queryset__sync_downloads_in_progress_removed(self):
+        self.client.login(
+            username=self.user1.username,
+            password=DUMMY_PASSWORD,
+            facility=self.facility,
+        )
+        self._create_transfer_session(
+            active=False,
+        )
+        content_request = ContentDownloadRequest.build_for_user(self.user1)
+        content_request.contentnode_id = uuid.uuid4().hex
+        content_request.reason = ContentRequestReason.SyncInitiated
+        content_request.save()
+        content_removal_request = ContentRemovalRequest.build_for_user(self.user1)
+        content_removal_request.contentnode_id = content_request.contentnode_id
+        content_removal_request.reason = ContentRequestReason.SyncInitiated
+        content_removal_request.save()
+        response = self.client.get(reverse("kolibri:core:usersyncstatus-list"))
+        self.assertFalse(response.data[0]["sync_downloads_in_progress"])
+
+
+class CSRFProtectedDeviceTestCase(APITestCase):
+    def setUp(self):
+        clear_process_cache()
+        self.client_csrf = APIClient(enforce_csrf_checks=True)
+        self.superuser_data = {"username": "superuser", "password": "password"}
+        self.facility_data = {"name": "Wilson Elementary"}
+        self.preset_data = "nonformal"
+        self.settings = {}
+        self.allow_guest_access = True
+        self.language_id = "en"
+
+    def test_csrf_protected_deviceprovision(self):
+        response = self.client_csrf.post(
+            reverse("kolibri:core:deviceprovision"),
+            {
+                "device_name": None,
+                "superuser": self.superuser_data,
+                "facility": self.facility_data,
+                "preset": self.preset_data,
+                "settings": self.settings,
+                "language_id": self.language_id,
+                "allow_guest_access": self.allow_guest_access,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

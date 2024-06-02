@@ -6,11 +6,9 @@ import os
 from django.apps import AppConfig
 from django.conf import settings
 from django.db.backends.signals import connection_created
-from django.db.models.query import F
 from django.db.utils import DatabaseError
 from django_filters.filters import UUIDFilter
 from django_filters.rest_framework.filterset import FilterSet
-from six import raise_from
 
 from kolibri.core.errors import RedisConnectionError
 from kolibri.core.sqlite.pragmas import CONNECTION_PRAGMAS
@@ -52,10 +50,6 @@ class KolibriCoreConfig(AppConfig):
         # Register any django apps that may have kolibri plugin
         # modules inside them
         registered_plugins.register_non_plugins(settings.INSTALLED_APPS)
-        # Fixes issue using OuterRef within Cast() that is patched in later Django version
-        # Patch from https://github.com/django/django/commit/c412926a2e359afb40738d8177c9f3bef80ee04e
-        # https://code.djangoproject.com/ticket/29142
-        F.relabeled_clone = lambda self, relabels: self
 
     @staticmethod
     def activate_pragmas_per_connection(sender, connection, **kwargs):
@@ -117,10 +111,15 @@ class KolibriCoreConfig(AppConfig):
         if we are configured to do so, and if we should, otherwise make some logging noise.
         """
 
-        from redis.exceptions import ConnectionError
-
         if OPTIONS["Cache"]["CACHE_BACKEND"] != "redis":
             return
+
+        # Don't import until we've confirmed we're using Redis
+        # to avoid a hard dependency on Redis
+        # the options config has already been validated at this point
+        # so we know that redis is available.
+        from redis.exceptions import ConnectionError
+
         config_maxmemory = OPTIONS["Cache"]["CACHE_REDIS_MAXMEMORY"]
         config_maxmemory_policy = OPTIONS["Cache"]["CACHE_REDIS_MAXMEMORY_POLICY"]
 
@@ -170,9 +169,9 @@ class KolibriCoreConfig(AppConfig):
         except ConnectionError as e:
             logger.warning("Unable to connect to Redis: {}".format(str(e)))
 
-            raise_from(
-                RedisConnectionError("Unable to connect to Redis: {}".format(str(e))), e
-            )
+            raise RedisConnectionError(
+                "Unable to connect to Redis: {}".format(str(e))
+            ) from e
 
         except Exception as e:
             logger.warning("Unable to check Redis settings")

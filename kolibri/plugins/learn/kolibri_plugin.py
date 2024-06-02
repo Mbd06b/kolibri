@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-
 from django.urls import reverse
 
 from kolibri.core.auth.constants.user_kinds import ANONYMOUS
@@ -15,12 +11,13 @@ from kolibri.core.discovery.hooks import NetworkLocationBroadcastHook
 from kolibri.core.discovery.hooks import NetworkLocationDiscoveryHook
 from kolibri.core.hooks import NavigationHook
 from kolibri.core.hooks import RoleBasedRedirectHook
+from kolibri.core.utils.lock import retry_on_db_lock
 from kolibri.core.webpack import hooks as webpack_hooks
 from kolibri.plugins import KolibriPluginBase
 from kolibri.plugins.hooks import register_hook
 from kolibri.utils import conf
 from kolibri.utils import translation
-from kolibri.utils.translation import ugettext as _
+from kolibri.utils.translation import gettext as _
 
 
 class Learn(KolibriPluginBase):
@@ -63,6 +60,9 @@ class LearnAsset(webpack_hooks.WebpackBundleHook):
         from kolibri.core.discovery.well_known import CENTRAL_CONTENT_BASE_INSTANCE_ID
 
         return {
+            "allowDownloadOnMeteredConnection": get_device_setting(
+                "allow_download_on_metered_connection"
+            ),
             "allowGuestAccess": get_device_setting("allow_guest_access"),
             "allowLearnerDownloads": get_device_setting(
                 "allow_learner_download_resources"
@@ -81,6 +81,13 @@ class LearnAsset(webpack_hooks.WebpackBundleHook):
 @register_hook
 class MyDownloadsAsset(webpack_hooks.WebpackBundleHook):
     bundle_id = "my_downloads_app"
+
+    @property
+    def plugin_data(self):
+        return {
+            "setLimitForAutodownload": get_device_setting("set_limit_for_autodownload"),
+            "limitForAutodownload": get_device_setting("limit_for_autodownload"),
+        }
 
 
 @register_hook
@@ -102,54 +109,31 @@ class LearnContentNodeHook(ContentNodeDisplayHook):
             )
 
 
-class DiscoveryHookMixin(object):
-    def _learner_ids(self):
-        """
-        :return: A list of all learner ids
-        :rtype: str[]
-        """
-        from kolibri.core.auth.models import FacilityUser
+@retry_on_db_lock
+def request_soud_sync(network_location):
+    """
+    :type network_location: kolibri.core.discovery.models.NetworkLocation
+    """
+    from kolibri.core.auth.tasks import enqueue_soud_sync_processing
+    from kolibri.core.device.soud import request_sync_hook
 
-        return FacilityUser.objects.all().values_list("id", flat=True)
-
-    def _begin_request_soud_sync(self, network_location):
-        """
-        :type network_location: kolibri.core.discovery.models.NetworkLocation
-        """
-        from kolibri.core.auth.tasks import begin_request_soud_sync
-
-        for user_id in self._learner_ids():
-            begin_request_soud_sync(network_location.base_url, user_id)
+    if not network_location.subset_of_users_device and network_location.is_kolibri:
+        request_sync_hook(network_location)
+        enqueue_soud_sync_processing()
 
 
 @register_hook
-class NetworkDiscoveryForSoUDHook(NetworkLocationDiscoveryHook, DiscoveryHookMixin):
+class NetworkDiscoveryForSoUDHook(NetworkLocationDiscoveryHook):
     def on_connect(self, network_location):
         """
         :type network_location: kolibri.core.discovery.models.NetworkLocation
         """
-        if (
-            get_device_setting("subset_of_users_device")
-            and not network_location.subset_of_users_device
-        ):
-            self._begin_request_soud_sync(network_location)
-
-    def on_disconnect(self, network_location):
-        """
-        :type network_location: kolibri.core.discovery.models.NetworkLocation
-        """
-        from kolibri.core.auth.tasks import stop_request_soud_sync
-
-        if (
-            get_device_setting("subset_of_users_device")
-            and not network_location.subset_of_users_device
-        ):
-            for user_id in self._learner_ids():
-                stop_request_soud_sync(network_location.base_url, user_id)
+        if get_device_setting("subset_of_users_device"):
+            request_soud_sync(network_location)
 
 
 @register_hook
-class NetworkBroadcastForSoUDHook(NetworkLocationBroadcastHook, DiscoveryHookMixin):
+class NetworkBroadcastForSoUDHook(NetworkLocationBroadcastHook):
     """
     This hook is used to hook into the broadcast of the SoUD status of this device to other
     devices on the network. So when this device is updated, possibly to SoUD, it will
@@ -165,10 +149,17 @@ class NetworkBroadcastForSoUDHook(NetworkLocationBroadcastHook, DiscoveryHookMix
             return
 
         for network_location in network_locations:
-            if not network_location.subset_of_users_device:
-                self._begin_request_soud_sync(network_location)
+            request_soud_sync(network_location)
 
 
 @register_hook
 class MyDownloadsNavAction(NavigationHook):
     bundle_id = "my_downloads_side_nav"
+
+    @property
+    def plugin_data(self):
+        return {
+            "allowLearnerDownloads": get_device_setting(
+                "allow_learner_download_resources"
+            ),
+        }

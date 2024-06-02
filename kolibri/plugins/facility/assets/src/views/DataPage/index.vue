@@ -184,11 +184,11 @@
 <script>
 
   import { mapState, mapGetters, mapActions } from 'vuex';
-  import { isEmbeddedWebView } from 'kolibri.utils.browserInfo';
+  import useUser from 'kolibri.coreVue.composables.useUser';
   import urls from 'kolibri.urls';
   import { FacilityResource } from 'kolibri.resources';
   import commonCoreStrings from 'kolibri.coreVue.mixins.commonCoreStrings';
-  import useKResponsiveWindow from 'kolibri-design-system/lib/useKResponsiveWindow';
+  import useKResponsiveWindow from 'kolibri-design-system/lib/composables/useKResponsiveWindow';
   import validationConstants from 'kolibri-design-system/lib/KDateRange/validationConstants';
   import { currentLanguage } from 'kolibri.utils.i18n';
   import { now } from 'kolibri.utils.serverClock';
@@ -221,7 +221,8 @@
     mixins: [commonCoreStrings],
     setup() {
       const { windowIsMedium, windowIsSmall } = useKResponsiveWindow();
-      return { windowIsMedium, windowIsSmall };
+      const { isAppContext } = useUser();
+      return { windowIsMedium, windowIsSmall, isAppContext };
     },
     data() {
       return {
@@ -247,7 +248,7 @@
       // NOTE: We disable CSV file upload/download on embedded web views like the Mac
       // and Android apps
       canUploadDownloadFiles() {
-        return !isEmbeddedWebView;
+        return !this.isAppContext;
       },
       pollForTasks() {
         return this.$route.name === PageNames.DATA_EXPORT_PAGE;

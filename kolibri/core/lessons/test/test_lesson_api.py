@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -24,6 +20,8 @@ DUMMY_PASSWORD = "password"
 
 
 class LessonAPITestCase(APITestCase):
+    databases = "__all__"
+
     @classmethod
     def setUpTestData(cls):
         provision_device()

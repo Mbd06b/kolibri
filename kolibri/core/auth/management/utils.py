@@ -11,7 +11,6 @@ from functools import wraps
 
 import requests
 from django.core.management.base import CommandError
-from django.utils.six.moves import input
 from morango.models import Certificate
 from morango.models import InstanceIDModel
 from morango.models import ScopeDefinition
@@ -50,7 +49,7 @@ def confirm_or_exit(message):
     while answer not in ["yes", "n", "no"]:
         answer = input("{} [Type 'yes' or 'no'.] ".format(message)).lower()
     if answer != "yes":
-        print("Canceled! Exiting without touching the database.")
+        logger.info("Canceled! Exiting without touching the database.")
         sys.exit(1)
 
 
@@ -309,7 +308,7 @@ def create_superuser_and_provision_device(username, dataset_id, noninteractive=F
                 DevicePermissions.objects.create(
                     user=superuser, is_superuser=True, can_manage_content=True
                 )
-                print(
+                logger.info(
                     "Temporary superuser with username: `superuser` and password: `password` created"
                 )
                 return
@@ -317,7 +316,7 @@ def create_superuser_and_provision_device(username, dataset_id, noninteractive=F
                 "Please enter username of account that will become the superuser on this device: "
             )
         if not FacilityUser.objects.filter(username=username).exists():
-            print(
+            logger.error(
                 "User with username `{}` does not exist on this device".format(username)
             )
             username = None

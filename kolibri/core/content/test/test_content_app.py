@@ -18,14 +18,18 @@ from le_utils.constants import content_kinds
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from kolibri.core.auth.models import Classroom
 from kolibri.core.auth.models import Facility
 from kolibri.core.auth.models import FacilityUser
+from kolibri.core.auth.models import LearnerGroup
 from kolibri.core.auth.test.helpers import provision_device
 from kolibri.core.content import models as content
 from kolibri.core.content.test.test_channel_upgrade import ChannelBuilder
 from kolibri.core.device.models import ContentCacheKey
 from kolibri.core.device.models import DevicePermissions
 from kolibri.core.device.models import DeviceSettings
+from kolibri.core.lessons.models import Lesson
+from kolibri.core.lessons.models import LessonAssignment
 from kolibri.core.logger.models import ContentSessionLog
 from kolibri.core.logger.models import ContentSummaryLog
 from kolibri.utils.tests.helpers import override_option
@@ -37,6 +41,8 @@ class ContentNodeTestBase(object):
     """
     Basecase for content metadata methods
     """
+
+    databases = "__all__"
 
     def test_get_prerequisites_for(self):
         """
@@ -392,7 +398,7 @@ class ContentNodeAPIBase(object):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("HTTP_IF_NONE_MATCH", response.request)
         self.assertEqual(len(response.data), expected_len)
-        self.assertEqual(response["ETag"], expected_etag)
+        self.assertEqual(response.headers["ETag"], expected_etag)
         self.assertIn(url, self.client_cache)
         cached_response = self.client_cache[url]
         self.assertEqual(len(cached_response.data), expected_len)
@@ -404,7 +410,7 @@ class ContentNodeAPIBase(object):
         self.assertIn("HTTP_IF_NONE_MATCH", response.request)
         self.assertEqual(response.request["HTTP_IF_NONE_MATCH"], expected_etag)
         self.assertEqual(response.content, b"")
-        self.assertEqual(response["ETag"], '"{}"'.format(cache_key))
+        self.assertEqual(response.headers["ETag"], '"{}"'.format(cache_key))
 
         # Update the content cache key to get a new response.
         time.sleep(0.01)
@@ -417,7 +423,7 @@ class ContentNodeAPIBase(object):
         self.assertIn("HTTP_IF_NONE_MATCH", response.request)
         self.assertEqual(response.request["HTTP_IF_NONE_MATCH"], old_expected_etag)
         self.assertEqual(len(response.data), expected_len)
-        self.assertEqual(response["ETag"], '"{}"'.format(cache_key))
+        self.assertEqual(response.headers["ETag"], '"{}"'.format(cache_key))
         old_cached_response = cached_response
         cached_response = self.client_cache[url]
         self.assertEqual(len(cached_response.data), expected_len)
@@ -430,7 +436,7 @@ class ContentNodeAPIBase(object):
         self.assertIn("HTTP_IF_NONE_MATCH", response.request)
         self.assertEqual(response.request["HTTP_IF_NONE_MATCH"], expected_etag)
         self.assertEqual(response.content, b"")
-        self.assertEqual(response["ETag"], '"{}"'.format(cache_key))
+        self.assertEqual(response.headers["ETag"], '"{}"'.format(cache_key))
 
     @unittest.skipIf(
         getattr(settings, "DATABASES")["default"]["ENGINE"]
@@ -1210,8 +1216,7 @@ class ContentNodeAPITestCase(ContentNodeAPIBase, APITestCase):
             reverse("kolibri:core:contentnode-list"),
             data={"content_id": "this is not a uuid"},
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 0)
+        self.assertEqual(response.status_code, 400)
 
     def test_contentnode_parent(self):
         parent = content.ContentNode.objects.get(title="c2")
@@ -1581,7 +1586,7 @@ class ContentNodeAPITestCase(ContentNodeAPIBase, APITestCase):
         response = self.client.get(
             reverse("kolibri:core:usercontentnode-list"), data={"resume": True}
         )
-        self.assertEqual(response["Cache-Control"], "max-age=0")
+        self.assertEqual(response.headers["Cache-Control"], "max-age=0")
 
     def test_next_steps_prereq(self):
         facility = Facility.objects.create(name="MyFac")
@@ -1624,7 +1629,7 @@ class ContentNodeAPITestCase(ContentNodeAPIBase, APITestCase):
         response = self.client.get(
             reverse("kolibri:core:usercontentnode-list"), data={"next_steps": True}
         )
-        self.assertEqual(response["Cache-Control"], "max-age=0")
+        self.assertEqual(response.headers["Cache-Control"], "max-age=0")
 
     def test_next_steps_prereq_in_progress(self):
         facility = Facility.objects.create(name="MyFac")
@@ -1818,6 +1823,118 @@ class ContentNodeAPITestCase(ContentNodeAPIBase, APITestCase):
         )
         response_content_ids = {node["content_id"] for node in response.json()}
         self.assertSetEqual(set(expected_content_ids), response_content_ids)
+
+    def test_lesson_filter(self):
+        classroom = Classroom.objects.create(name="classroom", parent=self.facility)
+        user = FacilityUser.objects.create(username="user", facility=self.facility)
+        classroom.add_member(user)
+        node = content.ContentNode.objects.get(
+            content_id="ce603df7c46b424b934348995e1b05fb"
+        )
+
+        resources = [
+            {
+                "contentnode_id": node.id,
+                "content_id": node.content_id,
+                "channel_id": node.channel_id,
+            }
+        ]
+
+        own_lesson = Lesson.objects.create(
+            title="Lesson",
+            collection=classroom,
+            created_by=self.admin,
+            is_active=True,
+            resources=resources,
+        )
+        LessonAssignment.objects.create(
+            lesson=own_lesson, assigned_by=self.admin, collection=classroom
+        )
+        user.set_password(DUMMY_PASSWORD)
+        user.save()
+        self.client.login(username=user.username, password=DUMMY_PASSWORD)
+        response = self.client.get(
+            reverse("kolibri:core:usercontentnode-list"), data={"lesson": own_lesson.id}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["content_id"], node.content_id)
+
+    def test_lesson_filter_not_own_lesson(self):
+        classroom = Classroom.objects.create(name="classroom", parent=self.facility)
+        user = FacilityUser.objects.create(username="user", facility=self.facility)
+        node = content.ContentNode.objects.get(
+            content_id="ce603df7c46b424b934348995e1b05fb"
+        )
+
+        resources = [
+            {
+                "contentnode_id": node.id,
+                "content_id": node.content_id,
+                "channel_id": node.channel_id,
+            }
+        ]
+
+        own_lesson = Lesson.objects.create(
+            title="Lesson",
+            collection=classroom,
+            created_by=self.admin,
+            is_active=True,
+            resources=resources,
+        )
+        LessonAssignment.objects.create(
+            lesson=own_lesson, assigned_by=self.admin, collection=classroom
+        )
+        user.set_password(DUMMY_PASSWORD)
+        user.save()
+        self.client.login(username=user.username, password=DUMMY_PASSWORD)
+        response = self.client.get(
+            reverse("kolibri:core:usercontentnode-list"), data={"lesson": own_lesson.id}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 0)
+
+    def test_lesson_filter_multiple_assignment(self):
+        classroom = Classroom.objects.create(name="classroom", parent=self.facility)
+        user = FacilityUser.objects.create(username="user", facility=self.facility)
+        classroom.add_member(user)
+        node = content.ContentNode.objects.get(
+            content_id="ce603df7c46b424b934348995e1b05fb"
+        )
+
+        resources = [
+            {
+                "contentnode_id": node.id,
+                "content_id": node.content_id,
+                "channel_id": node.channel_id,
+            }
+        ]
+
+        own_lesson = Lesson.objects.create(
+            title="Lesson",
+            collection=classroom,
+            created_by=self.admin,
+            is_active=True,
+            resources=resources,
+        )
+        LessonAssignment.objects.create(
+            lesson=own_lesson, assigned_by=self.admin, collection=classroom
+        )
+        user.set_password(DUMMY_PASSWORD)
+        user.save()
+        self.client.login(username=user.username, password=DUMMY_PASSWORD)
+        group = LearnerGroup.objects.create(name="Own Group", parent=classroom)
+        group.add_member(user)
+        LessonAssignment.objects.create(
+            lesson=own_lesson, assigned_by=self.admin, collection=group
+        )
+        self.client.login(username=user.username, password=DUMMY_PASSWORD)
+        response = self.client.get(
+            reverse("kolibri:core:usercontentnode-list"), data={"lesson": own_lesson.id}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["content_id"], node.content_id)
 
     def tearDown(self):
         """

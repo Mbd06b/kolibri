@@ -78,13 +78,13 @@
           v-model="fixedOrder"
           :label="coachString('orderRandomLabel')"
           :description="coachString('orderRandomDescription')"
-          :value="false"
+          :buttonValue="false"
         />
         <KRadioButton
           v-model="fixedOrder"
           :label="coachString('orderFixedLabel')"
           :description="coachString('orderFixedDescription')"
-          :value="true"
+          :buttonValue="true"
         />
       </div>
 
@@ -125,7 +125,6 @@
   import { mapState } from 'vuex';
 
   import BottomAppBar from 'kolibri.coreVue.components.BottomAppBar';
-  import responsiveWindowMixin from 'kolibri.coreVue.mixins.responsiveWindowMixin';
   import { ERROR_CONSTANTS } from 'kolibri.coreVue.vuex.constants';
   import CatchErrors from 'kolibri.utils.CatchErrors';
   import commonCoreStrings from 'kolibri.coreVue.mixins.commonCoreStrings';
@@ -141,7 +140,7 @@
       CoachImmersivePage,
       QuestionListPreview,
     },
-    mixins: [responsiveWindowMixin, commonCoach, commonCoreStrings],
+    mixins: [commonCoach, commonCoreStrings],
     data() {
       return {
         showError: false,

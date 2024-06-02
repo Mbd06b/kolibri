@@ -1,5 +1,6 @@
 from collections import OrderedDict
 
+from rest_framework.serializers import BooleanField
 from rest_framework.serializers import CharField
 from rest_framework.serializers import IntegerField
 from rest_framework.serializers import ListField
@@ -30,12 +31,21 @@ class QuestionSourceSerializer(Serializer):
     exercise_id = HexUUIDField(format="hex")
     # V0 need not have question_id that is why required=False
     question_id = HexUUIDField(format="hex", required=False)
-    title = CharField()
+    title = CharField(default="")
     counter_in_exercise = IntegerField()
+    missing_resources = BooleanField(default=False)
+
+
+class QuizSectionSerializer(Serializer):
+    section_id = HexUUIDField(format="hex")
+    description = CharField(required=False, allow_blank=True)
+    section_title = CharField(allow_blank=True, required=False)
+    question_count = IntegerField()
+    learners_see_fixed_order = BooleanField(default=False)
+    questions = ListField(child=QuestionSourceSerializer(), required=False)
 
 
 class ExamSerializer(ModelSerializer):
-
     assignments = ListField(
         child=PrimaryKeyRelatedField(read_only=False, queryset=Collection.objects.all())
     )
@@ -45,10 +55,11 @@ class ExamSerializer(ModelSerializer):
         ),
         required=False,
     )
-    question_sources = ListField(child=QuestionSourceSerializer(), required=False)
+    question_sources = ListField(child=QuizSectionSerializer(), required=False)
     creator = PrimaryKeyRelatedField(
         read_only=False, queryset=FacilityUser.objects.all()
     )
+    question_count = IntegerField(allow_null=True)
     date_archived = DateTimeTzField(allow_null=True)
     date_activated = DateTimeTzField(allow_null=True)
 
@@ -57,7 +68,6 @@ class ExamSerializer(ModelSerializer):
         fields = (
             "id",
             "title",
-            "question_count",
             "question_sources",
             "seed",
             "active",
@@ -67,11 +77,12 @@ class ExamSerializer(ModelSerializer):
             "date_activated",
             "assignments",
             "creator",
+            "question_count",
             "data_model_version",
             "learners_see_fixed_order",
             "learner_ids",
         )
-        read_only_fields = ("data_model_version",)
+        read_only_fields = ("data_model_version", "question_count")
 
     def validate(self, attrs):
         title = attrs.get("title")
@@ -103,6 +114,19 @@ class ExamSerializer(ModelSerializer):
                 code=error_constants.UNIQUE,
             )
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if "question_sources" in data and data["question_sources"]:
+            if data["data_model_version"] == 3:
+                data["question_sources"] = QuizSectionSerializer(
+                    instance.question_sources, many=True
+                ).data
+            else:
+                data["question_sources"] = QuestionSourceSerializer(
+                    instance.question_sources, many=True
+                ).data
+        return data
+
     def to_internal_value(self, data):
         # Make a new OrderedDict from the input, which could be an immutable QueryDict
         data = OrderedDict(data)
@@ -112,6 +136,12 @@ class ExamSerializer(ModelSerializer):
             else:
                 # Otherwise we are just updating the exam, so allow a partial update
                 self.partial = True
+
+        question_sources = data.get("question_sources", [])
+        data["question_count"] = sum(
+            len(source.get("questions", [])) for source in question_sources
+        )
+
         return super(ExamSerializer, self).to_internal_value(data)
 
     def create(self, validated_data):

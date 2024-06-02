@@ -19,6 +19,7 @@ from kolibri.core.auth.constants.facility_presets import mappings
 from kolibri.core.content.constants.schema_versions import MIN_CONTENT_SCHEMA_VERSION
 from kolibri.utils.android import ANDROID_PLATFORM_SYSTEM_VALUE
 from kolibri.utils.android import on_android
+from kolibri.utils.lru_cache import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,6 @@ def set_device_settings(**kwargs):
     :param kwargs: a dictionary of key-value pairs to set on the device settings model
     """
     from .models import DeviceSettings
-    from .models import extra_settings_schema
 
     try:
         device_settings = DeviceSettings.objects.get()
@@ -110,16 +110,9 @@ def set_device_settings(**kwargs):
             language_id=settings.LANGUAGE_CODE
         )
 
-    extra_settings_properties = extra_settings_schema.get("properties", {}).keys()
-    extra_settings = device_settings.extra_settings or {}
-
     for key, value in kwargs.items():
-        if key not in extra_settings_properties:
-            setattr(device_settings, key, value)
-        else:
-            extra_settings[key] = value
+        setattr(device_settings, key, value)
 
-    device_settings.extra_settings = extra_settings
     device_settings.save()
 
 
@@ -484,3 +477,20 @@ def get_device_info(version=DEVICE_INFO_VERSION):
         info[key] = all_info[key]
 
     return info
+
+
+@lru_cache()
+def is_full_facility_import(dataset_id):
+    """
+    Returns True if this the dataset_id holds a facility that has been fully imported.
+    """
+    from morango.models.certificates import Certificate
+    from kolibri.core.auth.constants.morango_sync import ScopeDefinitions
+
+    return (
+        Certificate.objects.get(id=dataset_id)
+        .get_descendants(include_self=True)
+        .exclude(_private_key__isnull=True)
+        .filter(scope_definition_id=ScopeDefinitions.FULL_FACILITY)
+        .exists()
+    )

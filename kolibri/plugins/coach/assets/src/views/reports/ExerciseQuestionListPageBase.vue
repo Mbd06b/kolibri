@@ -3,13 +3,12 @@
   <CoachAppBarPage
     :authorized="userIsAuthorized"
     authorizedRole="adminOrCoach"
-    :showSubNav="true"
   >
 
     <KPageContainer>
 
       <ReportsResourceHeader
-        :resource="exercise"
+        :resource="resource"
         @previewClick="onPreviewClick"
       />
 
@@ -82,12 +81,10 @@
     mixins: [commonCoach],
     computed: {
       ...mapState('questionList', ['exercise']),
+      ...mapState('resourceDetail', ['resource']),
       ...mapGetters('questionList', ['difficultQuestions']),
       lesson() {
         return this.lessonMap[this.$route.params.lessonId];
-      },
-      resource() {
-        return this.contentMap[this.$route.params.exerciseId];
       },
       group() {
         return this.$route.params.groupId && this.groupMap[this.$route.params.groupId];

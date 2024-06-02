@@ -23,7 +23,13 @@ def exam_assignment_lookup(question_sources):
     :return: a tuple of contentnode_id and metadata
     """
     for question_source in question_sources:
-        yield (question_source["exercise_id"], None)
+        if "section_id" in question_source:
+            questions = question_source.get("questions")
+            if questions is not None:
+                for question in question_source["questions"]:
+                    yield (question["exercise_id"], None)
+        else:
+            yield (question_source["exercise_id"], None)
 
 
 class Exam(AbstractFacilityDataModel):
@@ -64,7 +70,6 @@ class Exam(AbstractFacilityDataModel):
                   "section_id": <a uuid unique to this section>,
                   "section_title": <section title>,
                   "description": <section description>,
-                  "resource_pool": [ <contentnode_ids of pool of resources> ],
                   "question_count": <number of questions in section>,
                   "learners_see_fixed_order": <bool>,
                   "questions": [
@@ -141,10 +146,18 @@ class Exam(AbstractFacilityDataModel):
     # who creates them in the context of their class, this stores that relationship but does
     # not assign exam itself to the class - for that see the ExamAssignment model.
     collection = models.ForeignKey(
-        Collection, related_name="exams", blank=False, null=False
+        Collection,
+        related_name="exams",
+        blank=False,
+        null=False,
+        on_delete=models.CASCADE,
     )
     creator = models.ForeignKey(
-        FacilityUser, related_name="exams", blank=False, null=True
+        FacilityUser,
+        related_name="exams",
+        blank=False,
+        null=True,
+        on_delete=models.CASCADE,
     )
 
     # To be set True when the quiz is first set to active=True
@@ -216,6 +229,20 @@ class Exam(AbstractFacilityDataModel):
     def __str__(self):
         return self.title
 
+    def get_questions(self):
+        """
+        Returns a list of all questions from all sections in the exam.
+        """
+        questions = []
+        if self.data_model_version == 3:
+            for section in self.question_sources:
+                for question in section.get("questions", []):
+                    questions.append(question)
+        else:
+            for question in self.question_sources:
+                questions.append(question)
+        return questions
+
 
 class ExamAssignment(AbstractFacilityDataModel):
     """
@@ -235,12 +262,26 @@ class ExamAssignment(AbstractFacilityDataModel):
         )
         | UserCanReadExamAssignmentData()
     )
-    exam = models.ForeignKey(Exam, related_name="assignments", blank=False, null=False)
+    exam = models.ForeignKey(
+        Exam,
+        related_name="assignments",
+        blank=False,
+        null=False,
+        on_delete=models.CASCADE,
+    )
     collection = models.ForeignKey(
-        Collection, related_name="assigned_exams", blank=False, null=False
+        Collection,
+        related_name="assigned_exams",
+        blank=False,
+        null=False,
+        on_delete=models.CASCADE,
     )
     assigned_by = models.ForeignKey(
-        FacilityUser, related_name="assigned_exams", blank=False, null=True
+        FacilityUser,
+        related_name="assigned_exams",
+        blank=False,
+        null=True,
+        on_delete=models.CASCADE,
     )
 
     def pre_save(self):
@@ -311,8 +352,8 @@ class IndividualSyncableExam(AbstractFacilityDataModel):
 
     morango_model_name = "individualsyncableexam"
 
-    user = models.ForeignKey(FacilityUser)
-    collection = models.ForeignKey(Collection)
+    user = models.ForeignKey(FacilityUser, on_delete=models.CASCADE)
+    collection = models.ForeignKey(Collection, on_delete=models.CASCADE)
     exam_id = models.UUIDField()
 
     serialized_exam = JSONField()

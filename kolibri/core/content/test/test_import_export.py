@@ -5,12 +5,12 @@ import sys
 import tempfile
 import time
 import uuid
+from io import StringIO
 
 from django.core.management import call_command
 from django.core.management import CommandError
 from django.db.models import Q
 from django.test import TestCase
-from django.utils import six
 from le_utils.constants import content_kinds
 from mock import call
 from mock import MagicMock
@@ -443,6 +443,15 @@ class GetContentNodesDataTestCase(TestCase):
         self.assertEqual(total_resource_count, 0)
         self.assertCountEqual(files, expected_files_list)
         self.assertEqual(total_bytes_to_transfer, 5)
+
+    def test_empty_query(self):
+        (total_resource_count, files, total_bytes_to_transfer) = get_content_nodes_data(
+            self.the_channel_id, [ContentNode.objects.none()], available=True
+        )
+
+        self.assertEqual(total_resource_count, 0)
+        self.assertCountEqual(files, [])
+        self.assertEqual(total_bytes_to_transfer, 0)
 
 
 @patch(
@@ -1529,7 +1538,7 @@ class ImportContentTestCase(TestCase):
         # according to channel_id in the detected manifest file.
         get_import_export_mock.assert_called_once_with(
             self.the_channel_id,
-            {six.text_type(self.c2c1_node_id)},
+            {str(self.c2c1_node_id)},
             None,
             False,
             renderable_only=True,
@@ -1582,7 +1591,7 @@ class ImportContentTestCase(TestCase):
 
         get_import_export_mock.return_value = (0, [], 0)
 
-        manifest_file = six.StringIO(
+        manifest_file = StringIO(
             json.dumps(
                 {
                     "channels": [
@@ -1646,7 +1655,7 @@ class ImportContentTestCase(TestCase):
         manager = DiskChannelResourceImportManager.from_manifest(
             self.the_channel_id,
             path=import_source_dir,
-            manifest_file=six.StringIO(
+            manifest_file=StringIO(
                 json.dumps(
                     {
                         "channels": [
@@ -1683,7 +1692,7 @@ class ImportContentTestCase(TestCase):
         # list of node_ids built from all versions of the channel_id channel.
         get_import_export_mock.assert_called_once_with(
             self.the_channel_id,
-            {six.text_type(self.c2c1_node_id), six.text_type(self.c2c2_node_id)},
+            {str(self.c2c1_node_id), str(self.c2c2_node_id)},
             None,
             False,
             renderable_only=True,
@@ -1730,7 +1739,7 @@ class ImportContentTestCase(TestCase):
         # of node_ids, ignoring the detected manifest file.
         get_import_export_mock.assert_called_once_with(
             self.the_channel_id,
-            {six.text_type(self.c2c2_node_id)},
+            {str(self.c2c2_node_id)},
             None,
             False,
             renderable_only=True,
@@ -1786,7 +1795,7 @@ class ImportContentTestCase(TestCase):
         manager = DiskChannelResourceImportManager.from_manifest(
             self.the_channel_id,
             path=import_source_dir,
-            manifest_file=six.StringIO(
+            manifest_file=StringIO(
                 json.dumps(
                     {
                         "channels": [
@@ -1809,7 +1818,7 @@ class ImportContentTestCase(TestCase):
         # node_ids according to channel_id in the provided manifest file.
         get_import_export_mock.assert_called_once_with(
             self.the_channel_id,
-            {six.text_type(self.c2c2_node_id)},
+            {str(self.c2c2_node_id)},
             None,
             False,
             renderable_only=True,
@@ -1881,7 +1890,7 @@ class ImportContentTestCase(TestCase):
 
         manager = RemoteChannelResourceImportManager.from_manifest(
             self.the_channel_id,
-            manifest_file=six.StringIO(
+            manifest_file=StringIO(
                 json.dumps(
                     {
                         "channels": [
@@ -1903,7 +1912,7 @@ class ImportContentTestCase(TestCase):
         # channel_id in the provided manifest file.
         get_import_export_mock.assert_called_once_with(
             self.the_channel_id,
-            {six.text_type(self.c2c1_node_id)},
+            {str(self.c2c1_node_id)},
             None,
             False,
             renderable_only=True,
@@ -2245,6 +2254,33 @@ class ExportContentTestCase(TestCase):
         )
         cancel_mock.assert_called_with()
 
+    @patch(
+        "kolibri.core.content.management.commands.exportcontent.Command.copy_content_files"
+    )
+    def test_manifest_only(
+        self,
+        copy_content_files_mock,
+        ContentManifestMock,
+        get_content_nodes_data_mock,
+        get_import_export_nodes_mock,
+    ):
+        get_content_nodes_data_mock.return_value = (
+            1,
+            [LocalFile.objects.values("id", "file_size", "extension").first()],
+            10,
+        )
+
+        # run with manifest-only option
+        call_command(
+            "exportcontent", self.the_channel_id, tempfile.mkdtemp(), manifest_only=True
+        )
+
+        copy_content_files_mock.assert_not_called()
+
+        ContentManifestMock.return_value.write.assert_called_once()
+
+        # Shall be enough mock assertions for now ?
+
 
 class TestFilesToTransfer(TestCase):
 
@@ -2530,3 +2566,47 @@ class TestFilesToTransfer(TestCase):
             ),
             0,
         )
+
+    @patch(
+        "kolibri.core.content.utils.import_export_content.get_channel_stats_from_peer"
+    )
+    def test_import_supplementary_files_missing(self, channel_stats_mock):
+        ContentNode.objects.update(available=True)
+        LocalFile.objects.update(available=True)
+        supplementary = LocalFile.objects.filter(files__supplementary=True)
+        supplementary_ids = set(supplementary.values_list("id", flat=True))
+        self.assertNotEqual(supplementary_ids, set())
+        supplementary.update(available=False)
+        stats = {
+            key: {} for key in ContentNode.objects.all().values_list("id", flat=True)
+        }
+        channel_stats_mock.return_value = stats
+        _, files_to_transfer, _ = get_import_export_data(
+            self.the_channel_id, None, None, False, renderable_only=False, peer_id="1"
+        )
+        transfer_ids = set([f["id"] for f in files_to_transfer])
+        self.assertEqual(transfer_ids, supplementary_ids)
+
+    @patch(
+        "kolibri.core.content.utils.import_export_content.get_channel_stats_from_peer"
+    )
+    def test_export_supplementary_files_missing(self, channel_stats_mock):
+        ContentNode.objects.update(available=True)
+        LocalFile.objects.update(available=True)
+        supplementary = LocalFile.objects.filter(files__supplementary=True)
+        self.assertNotEqual(supplementary.count(), 0)
+        supplementary.update(available=False)
+        stats = {
+            key: {} for key in ContentNode.objects.all().values_list("id", flat=True)
+        }
+        channel_stats_mock.return_value = stats
+        _, files_to_transfer, _ = get_import_export_data(
+            self.the_channel_id, None, None, True, renderable_only=False, peer_id="1"
+        )
+        essential_ids = set(
+            LocalFile.objects.filter(files__supplementary=False).values_list(
+                "id", flat=True
+            )
+        )
+        transfer_ids = set([f["id"] for f in files_to_transfer])
+        self.assertEqual(transfer_ids, essential_ids)

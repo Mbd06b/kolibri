@@ -2,10 +2,6 @@
 
   <DeviceAppBarPage :title="pageTitle">
 
-    <template #subNav>
-      <DeviceTopNav />
-    </template>
-
     <KPageContainer v-if="!isPageLoading" class="device-container">
       <UiAlert
         v-if="showDisabledAlert && alertDismissed"
@@ -22,7 +18,7 @@
         <p>
           {{ $tr('pageDescription') }}
           <KExternalLink
-            v-if="!isMultiFacilitySuperuser && getFacilitySettingsPath()"
+            v-if="!isLearnerOnlyImport && !isMultiFacilitySuperuser && getFacilitySettingsPath()"
             :text="$tr('facilitySettings')"
             :href="getFacilitySettingsPath()"
           />
@@ -70,14 +66,14 @@
           <KRadioButton
             data-test="landingPageButton"
             :label="$tr('learnerAppPageChoice')"
-            :value="landingPageChoices.LEARN"
+            :buttonValue="landingPageChoices.LEARN"
             :currentValue="landingPage"
             @input="handleLandingPageChange"
           />
           <KRadioButton
             data-test="signInPageButton"
             :label="$tr('signInPageChoice')"
-            :value="landingPageChoices.SIGN_IN"
+            :buttonValue="landingPageChoices.SIGN_IN"
             :currentValue="landingPage"
             @input="handleLandingPageChange"
           />
@@ -85,7 +81,7 @@
             <KRadioButton
               data-test="allowGuestAccessButton"
               :label="$tr('allowGuestAccess')"
-              :value="SignInPageOptions.ALLOW_GUEST_ACCESS"
+              :buttonValue="SignInPageOptions.ALLOW_GUEST_ACCESS"
               :currentValue="signInPageOption"
               :disabled="disableSignInPageOptions"
               @input="handleSignInPageChange"
@@ -93,7 +89,7 @@
             <KRadioButton
               data-test="disallowGuestAccessButton"
               :label="$tr('disallowGuestAccess')"
-              :value="SignInPageOptions.DISALLOW_GUEST_ACCESS"
+              :buttonValue="SignInPageOptions.DISALLOW_GUEST_ACCESS"
               :currentValue="signInPageOption"
               :disabled="disableSignInPageOptions"
               @input="handleSignInPageChange"
@@ -101,7 +97,7 @@
             <KRadioButton
               data-test="lockedContentButton"
               :label="$tr('lockedContent')"
-              :value="SignInPageOptions.LOCKED_CONTENT"
+              :buttonValue="SignInPageOptions.LOCKED_CONTENT"
               :currentValue="signInPageOption"
               :disabled="disableSignInPageOptions"
               @input="handleSignInPageChange"
@@ -113,18 +109,18 @@
           <h2>
             <label>{{ $tr('allowDownloadOnMeteredConnection') }}</label>
           </h2>
-          <p class="info-description">
+          <p :class="InfoDescriptionColor">
             {{ $tr('DownloadOnMeteredConnectionDescription') }}
           </p>
           <KRadioButton
             :label="$tr('doNotAllowDownload')"
-            :value="meteredConnectionDownloadOptions.DISALLOW_DOWNLOAD_ON_METERED_CONNECTION"
+            :buttonValue="meteredConnectionDownloadOptions.DISALLOW_DOWNLOAD_ON_METERED_CONNECTION"
             :currentValue="meteredConnectionDownloadOption"
             @input="handleMeteredConnectionDownloadChange"
           />
           <KRadioButton
             :label="$tr('allowDownload')"
-            :value="meteredConnectionDownloadOptions.ALLOW_DOWNLOAD_ON_METERED_CONNECTION"
+            :buttonValue="meteredConnectionDownloadOptions.ALLOW_DOWNLOAD_ON_METERED_CONNECTION"
             :currentValue="meteredConnectionDownloadOption"
             @input="handleMeteredConnectionDownloadChange"
           />
@@ -134,7 +130,7 @@
           <h2>
             {{ $tr('primaryStorage') }}
           </h2>
-          <p class="info-description">
+          <p :class="InfoDescriptionColor">
             {{ $tr('primaryStorageDescription') }}
           </p>
           <p>
@@ -144,26 +140,26 @@
               :text="$tr('changeLocation')"
               :primary="true"
               appearance="basic-link"
-              :disabled="!multipleWritablePaths || isRemoteContent"
+              :disabled="!multipleWritablePaths || isRemoteContent || !canRestart"
               :class="{ 'disabled': !multipleWritablePaths }"
               @click="showChangePrimaryLocationModal = true"
             />
           </p>
           <KButton
-            v-if="browserLocationMatchesServerURL && (secondaryStorageLocations.length === 0)"
+            v-if="secondaryStorageLocations.length === 0"
             :text="$tr('addLocation')"
-            :disabled="isRemoteContent"
+            :disabled="isRemoteContent || !canRestart"
             appearance="raised-button"
             secondary
             @click="showAddStorageLocationModal = true"
           />
         </div>
 
-        <div v-show="browserLocationMatchesServerURL && (secondaryStorageLocations.length > 0)">
+        <div v-show="secondaryStorageLocations.length > 0">
           <h2>
             {{ $tr('secondaryStorage') }}
           </h2>
-          <p v-show="multipleReadOnlyPaths" class="info-description">
+          <p v-show="multipleReadOnlyPaths" :class="InfoDescriptionColor">
             {{ $tr('secondaryStorageDescription') }}
           </p>
           <p v-for="path in secondaryStorageLocations" :key="path.index">
@@ -173,7 +169,7 @@
             hasDropdown
             secondary
             appearance="raised-button"
-            :disabled="isRemoteContent"
+            :disabled="isRemoteContent || !canRestart"
             :text="coreString('optionsLabel')"
           >
             <template #menu>
@@ -210,22 +206,28 @@
             />
             <div
               v-show="setLimitForAutodownload"
-              class="left-margin"
+              class="left-margin limit-for-autodownload"
+              :class="$computedClass(limitForAutodownloadStyle)"
               :disabled="isRemoteContent"
             >
               <KTextbox
                 ref="autoDownloadLimit"
-                v-model="limitForAutodownload"
+                v-model="limitForAutodownloadInput"
                 class="download-limit-textbox"
                 :disabled="notEnoughFreeSpace || isRemoteContent"
                 type="number"
                 :label="$tr('sizeInGigabytesLabel')"
                 :min="0"
-                :max="freeSpace"
+                :max="toGigabytes(freeSpace)"
                 :invalid="notEnoughFreeSpace"
                 :invalidText="$tr('notEnoughFreeSpace')"
+                :floatingLabel="false"
+                @input="updateLimitForAutodownload"
               />
-              <div class="slider-section">
+              <div class="slider-section" :class="$computedClass(sliderSectionStyle)">
+                <p class="slider-min-max">
+                  0
+                </p>
                 <input
                   id="slider"
                   v-model="limitForAutodownload"
@@ -235,15 +237,11 @@
                   min="0"
                   :max="freeSpace"
                   step="1"
+                  @input="updateLimitForAutodownloadInput"
                 >
-                <div class="slider-constraints">
-                  <p class="slider-min-max">
-                    0
-                  </p>
-                  <p class="slider-min-max">
-                    {{ freeSpace }}
-                  </p>
-                </div>
+                <p class="slider-min-max">
+                  {{ toGigabytes(freeSpace) }}
+                </p>
               </div>
             </div>
           </div>
@@ -253,7 +251,7 @@
           <h2>
             {{ $tr('enabledPages') }}
           </h2>
-          <p class="info-description">
+          <p :class="InfoDescriptionColor">
             {{ deviceString('newEnabledPluginsState') }}
           </p>
 
@@ -336,6 +334,11 @@
         @submit="handleServerRestart"
       />
 
+      <ServerRestartModal
+        v-if="restarting"
+        :restarting="true"
+      />
+
     </KPageContainer>
   </DeviceAppBarPage>
 
@@ -347,13 +350,14 @@
   import { mapGetters } from 'vuex';
   import find from 'lodash/find';
   import urls from 'kolibri.urls';
+  import logger from 'kolibri.lib.logging';
   import { ref } from 'kolibri.lib.vueCompositionApi';
   import commonCoreStrings from 'kolibri.coreVue.mixins.commonCoreStrings';
   import UiAlert from 'kolibri-design-system/lib/keen/UiAlert';
   import { availableLanguages, currentLanguage } from 'kolibri.utils.i18n';
   import sortLanguages from 'kolibri.utils.sortLanguages';
-  import bytesForHumans from 'kolibri.utils.bytesForHumans';
   import BottomAppBar from 'kolibri.coreVue.components.BottomAppBar';
+  import useKResponsiveWindow from 'kolibri-design-system/lib/composables/useKResponsiveWindow';
   import { checkCapability } from 'kolibri.utils.appCapabilities';
   import commonDeviceStrings from '../commonDeviceStrings';
   import DeviceAppBarPage from '../DeviceAppBarPage';
@@ -366,6 +370,8 @@
   import AddStorageLocationModal from './AddStorageLocationModal';
   import RemoveStorageLocationModal from './RemoveStorageLocationModal';
   import ServerRestartModal from './ServerRestartModal';
+
+  const logging = logger.getLogger(__filename);
 
   const SignInPageOptions = Object.freeze({
     LOCKED_CONTENT: 'LOCKED_CONTENT',
@@ -391,8 +397,9 @@
     },
     mixins: [commonCoreStrings, commonDeviceStrings],
     setup() {
-      const { restart } = useDeviceRestart();
+      const { canRestart, restart, restarting } = useDeviceRestart();
       const { plugins, fetchPlugins, togglePlugin } = usePlugins();
+      const { windowIsSmall } = useKResponsiveWindow();
       const dataPlugins = ref(null);
 
       fetchPlugins.then(() => {
@@ -419,7 +426,15 @@
         return !unchanged;
       }
 
-      return { restart, dataPlugins, checkPluginChanges, checkAndTogglePlugins };
+      return {
+        canRestart,
+        restart,
+        restarting,
+        dataPlugins,
+        checkPluginChanges,
+        checkAndTogglePlugins,
+        windowIsSmall,
+      };
     },
     data() {
       return {
@@ -458,8 +473,13 @@
       };
     },
     computed: {
-      ...mapGetters(['isAppContext', 'isPageLoading']),
-      ...mapGetters('deviceInfo', ['canRestart', 'isRemoteContent']),
+      ...mapGetters(['isAppContext', 'isPageLoading', 'snackbarIsVisible', 'isLearnerOnlyImport']),
+      ...mapGetters('deviceInfo', ['isRemoteContent']),
+      InfoDescriptionColor() {
+        return {
+          color: this.$themePalette.grey.v_600,
+        };
+      },
       pageTitle() {
         return this.deviceString('deviceManagementTitle');
       },
@@ -488,12 +508,6 @@
       storageLocationOptions() {
         return [this.$tr('addStorageLocation'), this.$tr('removeStorageLocation')];
       },
-      browserLocationMatchesServerURL() {
-        return (
-          window.location.hostname.includes('127.0.0.1') ||
-          window.location.hostname.includes('localhost')
-        );
-      },
       notEnoughFreeSpace() {
         return this.freeSpace === 0;
       },
@@ -509,7 +523,22 @@
         });
         return this.readOnlyPaths >= 1;
       },
+      limitForAutodownloadStyle() {
+        const alignItems = this.windowIsSmall ? 'start' : 'center';
+        const flexDirection = this.windowIsSmall ? 'column' : 'row';
+        return {
+          alignItems,
+          flexDirection,
+        };
+      },
+      sliderSectionStyle() {
+        const paddingLeft = this.windowIsSmall ? '0px' : '20px';
+        return {
+          paddingLeft,
+        };
+      },
       sliderStyle() {
+        const width = this.windowIsSmall ? '35vw' : '12vw';
         if (this.notEnoughFreeSpace) {
           return {
             background: `linear-gradient(to right, ${this.$themeTokens.primary} 0%, ${
@@ -520,6 +549,7 @@
             '::-webkit-slider-thumb': {
               background: this.$themeTokens.fineLine,
             },
+            width,
           };
         } else {
           return {
@@ -533,6 +563,7 @@
             '::-webkit-slider-thumb': {
               background: this.$themeTokens.primary,
             },
+            width,
           };
         }
       },
@@ -553,6 +584,14 @@
           return this.$tr('alertDisabledPaths');
         }
         return this.$tr('alertDisabledOptions');
+      },
+      limitForAutodownloadInput: {
+        get() {
+          return this.toGigabytes(this.limitForAutodownload);
+        },
+        set(value) {
+          this.limitForAutodownload = this.toBytes(value);
+        },
       },
     },
     created() {
@@ -696,7 +735,7 @@
       },
       setFreeSpace() {
         return getFreeSpaceOnServer().then(({ freeSpace }) => {
-          this.freeSpace = parseInt(bytesForHumans(freeSpace).substring(0, 3));
+          this.freeSpace = freeSpace;
         });
       },
       handleLandingPageChange(option) {
@@ -761,6 +800,8 @@
         } = this.getContentSettings();
         this.getExtraSettings();
 
+        const pluginsChanged = this.checkPluginChanges();
+
         this.checkAndTogglePlugins();
 
         this.saveDeviceSettings({
@@ -774,15 +815,36 @@
           secondaryStorageLocations: this.secondaryStorageLocations,
           primaryStorageLocation: this.primaryStorageLocation,
         })
-          .then(() => {
-            this.$store.dispatch('createSnackbar', this.$tr('saveSuccessNotification'));
-            this.showRestartModal = false;
-            if (this.restartSetting !== null) {
-              this.restart();
-              this.restartSetting = null;
+          .then(didSave => {
+            didSave = didSave || pluginsChanged;
+            if (didSave) {
+              this.$store.commit('CORE_CREATE_SNACKBAR', {
+                text: this.$tr('saveSuccessNotification'),
+                autoDismiss: true,
+                duration: 2000,
+              });
+              this.showRestartModal = false;
+              if (this.canRestart && this.restartSetting !== null) {
+                this.restartSetting = null;
+                return this.restart().then(() => didSave);
+              }
+            }
+            return didSave;
+          })
+          .then(shouldReload => {
+            if (shouldReload) {
+              if (this.snackbarIsVisible) {
+                const unwatch = this.$watch('snackbarIsVisible', () => {
+                  unwatch && unwatch();
+                  window.location.reload();
+                });
+              } else {
+                window.location.reload();
+              }
             }
           })
-          .catch(() => {
+          .catch(err => {
+            logging.error(err);
             this.$store.dispatch('createSnackbar', this.$tr('saveFailureNotification'));
           });
       },
@@ -871,6 +933,18 @@
           return this.$tr('readOnly');
         }
         return '';
+      },
+      updateLimitForAutodownload() {
+        this.limitForAutodownload = this.toBytes(this.limitForAutodownloadInput);
+      },
+      updateLimitForAutodownloadInput() {
+        this.limitForAutodownloadInput = this.toGigabytes(this.limitForAutodownload);
+      },
+      toBytes(gigabytes) {
+        return parseInt(Math.round(gigabytes * 10 ** 9));
+      },
+      toGigabytes(bytes) {
+        return parseInt(Math.round(bytes / 10 ** 9));
       },
     },
     $trs: {
@@ -1118,12 +1192,14 @@
     margin-left: 32px;
   }
 
-  .info-description {
-    color: #616161;
+  .limit-for-autodownload {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
   }
 
   input[type='range'] {
-    width: 264px;
+    width: 12vw;
     height: 2px;
     margin-left: 10px;
     appearance: none;
@@ -1139,24 +1215,17 @@
   }
 
   .download-limit-textbox {
-    display: inline-block;
     width: 70px;
   }
 
   .slider-section {
-    position: absolute;
-    display: inline-block;
-    padding-top: 10px;
-  }
-
-  .slider-constraints {
     display: flex;
+    flex-direction: row;
     justify-content: space-between;
-    margin-left: 10px;
+    padding-left: 20px;
   }
 
   .slider-min-max {
-    display: inline-block;
     margin-top: 5px;
     font-size: 14px;
     font-weight: 400;

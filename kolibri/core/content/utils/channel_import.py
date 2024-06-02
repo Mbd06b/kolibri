@@ -6,7 +6,6 @@ from itertools import islice
 
 from django.apps import apps
 from django.db.models.fields.related import ForeignKey
-from six import string_types
 from sqlalchemy import and_
 from sqlalchemy import or_
 from sqlalchemy.dialects.postgresql import insert
@@ -240,12 +239,16 @@ class ChannelImport(object):
     ):
         self.channel_id = channel_id
         self.channel_version = channel_version
+        try:
+            self.current_channel = ChannelMetadata.objects.get(id=self.channel_id)
+        except ChannelMetadata.DoesNotExist:
+            self.current_channel = None
 
         self.cancel_check = cancel_check
 
         self.partial = partial
 
-        if isinstance(source, string_types):
+        if isinstance(source, str):
             if self.partial:
                 raise ValueError(
                     "partial init argument to channel import class can only be used with dict imports"
@@ -738,7 +741,9 @@ class ChannelImport(object):
                     )
                     return False
                 return True
-            elif current_version < self.channel_version or current_partial:
+            elif current_version is not None and (
+                current_version < self.channel_version or current_partial
+            ):
                 # We have an older version of this channel, so let's clean out the old stuff first
                 # Or we only have a partial import of this channel.
                 logger.info(
@@ -913,6 +918,11 @@ class ChannelImport(object):
         try:
             self.try_attaching_sqlite_database()
             transaction = self.destination.connection.begin()
+            if self.destination.engine.name == "sqlite":
+                # turn off foreign key integrity checking for the duration of the transaction
+                # so that we get similar behaviour to Postgresql, where the integrity of foreign
+                # keys is checked at the end of the transaction, rather than after each statement
+                self.destination.execute("PRAGMA foreign_keys=OFF")
             if self.check_and_delete_existing_channel():
                 for model in self.content_models:
                     model_start = time.time()
@@ -928,6 +938,9 @@ class ChannelImport(object):
                         )
                     )
                 import_ran = True
+            if self.destination.engine.name == "sqlite":
+                # reenable foreign key integrity checking before we commit the transaction
+                self.destination.execute("PRAGMA foreign_keys=ON")
 
             transaction.commit()
             self.try_detaching_sqlite_database()
@@ -951,11 +964,9 @@ class ChannelImport(object):
         return import_ran
 
     def run_and_annotate(self):
-        try:
-            self.current_channel = ChannelMetadata.objects.get(id=self.channel_id)
+        if self.current_channel:
             old_order = self.current_channel.order
-        except ChannelMetadata.DoesNotExist:
-            self.current_channel = None
+        else:
             old_order = None
 
         import_ran = self.import_channel_data()

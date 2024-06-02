@@ -4,13 +4,7 @@
     :authorized="authorized"
     :authorizedRole="authorizedRole"
   >
-    <AppBarPage :title="appBarTitle || defaultAppBarTitle">
-      <template
-        v-if="showSubNav && !isAppContext"
-        #subNav
-      >
-        <TopNavbar />
-      </template>
+    <AppBarPage :title="appBarTitle || defaultAppBarTitle" :showNavigation="Boolean(classId)">
       <div class="coach-main">
         <slot></slot>
       </div>
@@ -24,12 +18,11 @@
 
 <script>
 
-  import { mapState, mapGetters } from 'vuex';
+  import { mapState } from 'vuex';
   import AppBarPage from 'kolibri.coreVue.components.AppBarPage';
   import NotificationsRoot from 'kolibri.coreVue.components.NotificationsRoot';
   import commonCoreStrings from 'kolibri.coreVue.mixins.commonCoreStrings';
   import useCoreCoach from '../composables/useCoreCoach';
-  import TopNavbar from './TopNavbar';
 
   export default {
     name: 'CoachAppBarPage',
@@ -50,7 +43,7 @@
         title: this.pageTitle || this.defaultPageTitle,
       };
     },
-    components: { AppBarPage, NotificationsRoot, TopNavbar },
+    components: { AppBarPage, NotificationsRoot },
     mixins: [commonCoreStrings],
     setup() {
       const { pageTitle, appBarTitle } = useCoreCoach();
@@ -78,17 +71,12 @@
         type: String,
         default: null,
       },
-      showSubNav: {
-        type: Boolean,
-        required: false,
-        default: false,
-      },
     },
     computed: {
       ...mapState({
         error: state => state.core.error,
       }),
-      ...mapGetters(['isAppContext']),
+      ...mapState('classSummary', { classId: 'id' }),
     },
     $trs: {
       kolibriTitleMessage: {

@@ -3,14 +3,17 @@ import flushPromises from 'flush-promises';
 import Vuex from 'vuex';
 import VueRouter from 'vue-router';
 import KCircularLoader from 'kolibri-design-system/lib/loaders/KCircularLoader';
-import useKResponsiveWindow from 'kolibri-design-system/lib/useKResponsiveWindow';
+import useKResponsiveWindow from 'kolibri-design-system/lib/composables/useKResponsiveWindow';
 import { ContentNodeResource } from 'kolibri.resources';
 import useUser from 'kolibri.coreVue.composables.useUser';
 import { PageNames } from '../../src/constants';
 import LibraryPage from '../../src/views/LibraryPage';
+import OtherLibraries from '../../src/views/LibraryPage/OtherLibraries';
 /* eslint-disable import/named */
 import useSearch, { useSearchMock } from '../../src/composables/useSearch';
 import useChannels, { useChannelsMock } from '../../src/composables/useChannels';
+import usePinnedDevices, { usePinnedDevicesMock } from '../../src/composables/usePinnedDevices';
+import useDevices, { useDevicesMock } from '../../src/composables/useDevices';
 /* eslint-enable import/named */
 
 const localVue = createLocalVue();
@@ -34,6 +37,7 @@ const CHANNEL = {
 };
 
 jest.mock('../../src/composables/useChannels');
+jest.mock('../../src/composables/useCardLayoutSpan');
 jest.mock('../../src/composables/useDevices');
 jest.mock('../../src/composables/useSearch');
 jest.mock('../../src/composables/useLearnerResources');
@@ -41,7 +45,7 @@ jest.mock('../../src/composables/useLearningActivities');
 jest.mock('../../src/composables/useContentLink');
 jest.mock('../../src/composables/usePinnedDevices');
 jest.mock('kolibri.coreVue.composables.useUser');
-jest.mock('kolibri-design-system/lib/useKResponsiveWindow');
+jest.mock('kolibri-design-system/lib/composables/useKResponsiveWindow');
 jest.mock('kolibri.resources');
 jest.mock('kolibri.urls');
 
@@ -131,7 +135,7 @@ describe('LibraryPage', () => {
       // mount to ensure we can click the button
       const wrapper = await makeWrapper({
         fullMount: true,
-        options: { stubs: ['SidePanelModal', 'LearnTopNav'] },
+        options: { stubs: ['SidePanelModal'] },
       });
       // not displayed by default
       expect(wrapper.findComponent({ name: 'SearchFiltersPanel' }).element).toBeUndefined();
@@ -215,86 +219,116 @@ describe('LibraryPage', () => {
       moreLibraries: 'More',
       pinned: 'Pinned',
     };
-    const options = {
-      methods: {
-        refreshDevices: jest.fn(),
-      },
-      $trs: translations,
-    };
+    async function makeOtherLibrariesWrapper({ options } = {}) {
+      const wrapper = shallowMount(OtherLibraries, {
+        localVue,
+        router,
+        ...options,
+        propsData: {
+          injectedtr: msgId => translations[msgId], // mock the translation function
+        },
+      });
+      await flushPromises();
+      return wrapper;
+    }
     beforeEach(() => {
       useUser.mockImplementation(() => ({ isUserLoggedIn: true }));
       useSearch.mockImplementation(() => useSearchMock({ displayingSearchResults: false }));
     });
 
     it('show other libraries', async () => {
-      wrapper = await makeWrapper({ options });
+      wrapper = await makeWrapper();
       expect(wrapper.find('[data-test="other-libraries"').element).toBeTruthy();
     });
 
     describe('Loading status', () => {
       it('display "searching" label', async () => {
-        wrapper = await makeWrapper({ options });
-        await wrapper.setData({ searching: true });
+        wrapper = await makeOtherLibrariesWrapper();
+        await wrapper.setData({ searchingOtherLibraries: true });
         expect(wrapper.find('[data-test="searching"').isVisible()).toBe(true);
         expect(wrapper.find('[data-test="searching-label"').text()).toEqual(
           translations.searchingOtherLibrary
         );
       });
       it('display "showing all" label', async () => {
-        wrapper = await makeWrapper({
+        wrapper = await makeOtherLibrariesWrapper({
           options: {
-            ...options,
             computed: {
               devicesWithChannelsExist: jest.fn(() => true),
             },
           },
         });
-        await wrapper.setData({ searching: false });
+        await wrapper.setData({ searchingOtherLibraries: false });
         expect(wrapper.find('[data-test="showing-all"').isVisible()).toBe(true);
         expect(wrapper.find('[data-test="showing-all-label"').text()).toEqual(
           translations.showingAllLibraries
         );
       });
       it('display "no other" label', async () => {
-        wrapper = await makeWrapper({
-          options: {
-            ...options,
-            computed: {
-              devicesWithChannelsExist: jest.fn(() => false),
-            },
-          },
-        });
-        await wrapper.setData({ searching: false });
+        wrapper = await makeOtherLibrariesWrapper();
+        await wrapper.setData({ searchingOtherLibraries: false });
         expect(wrapper.find('[data-test="no-other"').isVisible()).toBe(true);
         expect(wrapper.find('[data-test="no-other-label"').text()).toEqual(
           translations.noOtherLibraries
         );
       });
       it('display "pinned" label', async () => {
-        wrapper = await makeWrapper({
-          options: {
-            ...options,
-            computed: {
-              pinnedDevicesExist: jest.fn(() => true),
-              unpinnedDevicesExist: jest.fn(() => true),
+        usePinnedDevices.mockImplementation(() =>
+          usePinnedDevicesMock({
+            pinnedDevicesExist: jest.fn(() => true),
+            unpinnedDevicesExist: jest.fn(() => true),
+            pinnedDevices: [{ instance_id: '1' }],
+            unpinnedDevices: [{ instance_id: '2' }, { instance_id: '3' }, { instance_id: '4' }],
+          })
+        );
+        useDevices.mockImplementation(() =>
+          useDevicesMock({
+            deviceChannelsMap: {
+              '1': [CHANNEL],
+              '2': [CHANNEL],
+              '3': [CHANNEL],
+              '4': [CHANNEL],
             },
-          },
-        });
+            networkDevicesWithChannels: [
+              { instance_id: '1' },
+              { instance_id: '2' },
+              { instance_id: '3' },
+              { instance_id: '4' },
+            ],
+          })
+        );
+        wrapper = await makeOtherLibrariesWrapper();
         const pinnedLabel = wrapper.find('[data-test="pinned-label"');
         expect(pinnedLabel.element).toBeTruthy();
         expect(pinnedLabel.text()).toEqual(translations.pinned);
         expect(wrapper.find('[data-test="pinned-resources"').element).toBeTruthy();
       });
       it('display "more" label', async () => {
-        wrapper = await makeWrapper({
-          options: {
-            ...options,
-            computed: {
-              pinnedDevicesExist: jest.fn(() => true),
-              unpinnedDevicesExist: jest.fn(() => true),
+        usePinnedDevices.mockImplementation(() =>
+          usePinnedDevicesMock({
+            pinnedDevicesExist: jest.fn(() => true),
+            unpinnedDevicesExist: jest.fn(() => true),
+            pinnedDevices: [{ instance_id: '1' }],
+            unpinnedDevices: [{ instance_id: '2' }, { instance_id: '3' }, { instance_id: '4' }],
+          })
+        );
+        useDevices.mockImplementation(() =>
+          useDevicesMock({
+            deviceChannelsMap: {
+              '1': [CHANNEL],
+              '2': [CHANNEL],
+              '3': [CHANNEL],
+              '4': [CHANNEL],
             },
-          },
-        });
+            networkDevicesWithChannels: [
+              { instance_id: '1' },
+              { instance_id: '2' },
+              { instance_id: '3' },
+              { instance_id: '4' },
+            ],
+          })
+        );
+        wrapper = await makeOtherLibrariesWrapper();
         const moreLabel = wrapper.find('[data-test="more-label"');
         expect(moreLabel.element).toBeTruthy();
         expect(moreLabel.text()).toEqual(translations.moreLibraries);

@@ -8,26 +8,38 @@
     :pageTitle="$tr('createNewExamLabel')"
     :route="backRoute"
   >
+    <UiAlert
+      v-if="showError && !inSearchMode"
+      type="error"
+      :dismissible="false"
+    >
+      {{ selectionIsInvalidText }}
+    </UiAlert>
 
     <KPageContainer
-      :style="{ ...maxContainerHeight, maxWidth: '1000px', margin: '0 auto' }"
+      :style="{ maxWidth: '1000px', margin: '0 auto 2em' }"
     >
 
-      <CreateQuizSection />
+      <CreateQuizSection v-if="quizInitialized" />
 
       <BottomAppBar>
+        <span
+          v-if="allSectionsEmpty"
+          class="message"
+        >
+          {{ allSectionsEmptyWarning$() }}
+        </span>
         <KButtonGroup>
           <KButton
             :text="coreString('saveAction')"
             primary
-            @click="() => quizForge.saveQuiz()"
+            :disabled="allSectionsEmpty"
+            @click="() => saveQuizAndRedirect()"
           />
         </KButtonGroup>
       </BottomAppBar>
 
     </KPageContainer>
-
-    <SectionSidePanel />
 
   </CoachImmersivePage>
 
@@ -36,62 +48,90 @@
 
 <script>
 
-  import responsiveWindowMixin from 'kolibri.coreVue.mixins.responsiveWindowMixin';
+  import { ref } from 'kolibri.lib.vueCompositionApi';
   import pickBy from 'lodash/pickBy';
   import BottomAppBar from 'kolibri.coreVue.components.BottomAppBar';
   import commonCoreStrings from 'kolibri.coreVue.mixins.commonCoreStrings';
+  import { enhancedQuizManagementStrings } from 'kolibri-common/strings/enhancedQuizManagementStrings';
   import { PageNames } from '../../../constants';
   import commonCoach from '../../common';
   import CoachImmersivePage from '../../CoachImmersivePage';
   import useQuizCreation from '../../../composables/useQuizCreation';
   import CreateQuizSection from './CreateQuizSection.vue';
-  import SectionSidePanel from './SectionSidePanel.vue';
-
-  const quizForge = useQuizCreation();
 
   export default {
     name: 'CreateExamPage',
     components: {
-      SectionSidePanel,
       CoachImmersivePage,
       BottomAppBar,
       CreateQuizSection,
     },
-    mixins: [commonCoreStrings, commonCoach, responsiveWindowMixin],
-    data() {
+    mixins: [commonCoreStrings, commonCoach],
+    setup() {
+      const { saveQuiz, initializeQuiz, allSectionsEmpty } = useQuizCreation();
+      const showError = ref(false);
+      const quizInitialized = ref(false);
+
+      const { allSectionsEmptyWarning$ } = enhancedQuizManagementStrings;
+
       return {
-        quizForge,
+        showError,
+        saveQuiz,
+        initializeQuiz,
+        quizInitialized,
+        allSectionsEmpty,
+        allSectionsEmptyWarning$,
       };
     },
-    /**
-     * @returns {object}
-     * @property {object} quizForge - see useQuizCreation for details; this is a reflection of
-     *                                the object returned by that function which is initialized
-     *                                within this component
-     * add `inject: ['quizForge']` to any descendant component to access this
-     */
     provide() {
       return {
-        quizForge: this.quizForge,
+        showError: this.showError,
+        moreResultsState: null,
+        // null corresponds to 'All' filter value
+        filters: {
+          channel: this.$route.query.channel || null,
+          kind: this.$route.query.kind || null,
+          role: this.$route.query.role || null,
+        },
+        // numQuestionsBlurred: false,
+        bookmarksCount: 0,
+        bookmarks: [],
+        more: null,
+        // showSectionSettingsMenu:false
       };
     },
     computed: {
-      maxContainerHeight() {
-        return { maxHeight: '1000px' };
-      },
       backRoute() {
         return { name: PageNames.EXAMS };
       },
     },
     watch: {
+      $route: function() {
+        // FIXME Coach shouldn't be setting loading in a beforeEach here maybe?
+        this.$store.dispatch('notLoading');
+      },
       filters(newVal) {
         this.$router.push({
           query: { ...this.$route.query, ...pickBy(newVal) },
         });
       },
     },
+    mounted() {
+      this.$store.dispatch('notLoading');
+    },
     created() {
-      this.quizForge.initializeQuiz();
+      this.initializeQuiz(this.$route.params.classId);
+      this.quizInitialized = true;
+    },
+    methods: {
+      saveQuizAndRedirect() {
+        this.saveQuiz().then(() => {
+          this.$router.replace({
+            name: PageNames.EXAMS,
+            classId: this.$route.params.classId,
+          });
+        });
+      },
     },
     $trs: {
       createNewExamLabel: {
@@ -104,4 +144,10 @@
 </script>
 
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+
+  .message {
+    margin-right: 8px;
+  }
+
+</style>

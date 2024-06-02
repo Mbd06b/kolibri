@@ -60,16 +60,16 @@ class ExamViewset(ValuesViewset):
     pagination_class = OptionalPageNumberPagination
     permission_classes = (ExamPermissions,)
     filter_backends = (KolibriAuthPermissionsFilter, DjangoFilterBackend)
-    filter_class = ExamFilter
+    filterset_class = ExamFilter
 
     values = (
         "id",
         "title",
-        "question_count",
         "question_sources",
         "seed",
         "active",
         "collection",
+        "question_count",
         "archive",
         "date_archived",
         "date_activated",
@@ -141,9 +141,11 @@ class ExamViewset(ValuesViewset):
         exams_sizes_set = []
         for exam in exams:
             quiz_size = {}
+
             quiz_nodes = ContentNode.objects.filter(
-                id__in={source["exercise_id"] for source in exam.question_sources}
+                id__in=[question["exercise_id"] for question in exam.get_questions()]
             )
+
             quiz_size[exam.id] = total_file_size(quiz_nodes)
             exams_sizes_set.append(quiz_size)
 

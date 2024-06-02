@@ -11,7 +11,7 @@
       :route="back"
       :appBarTitle="barTitle"
       :appearanceOverrides="{}"
-      :primary="!allowDownloads"
+      :primary="false"
       class="page"
     >
       <template #actions>
@@ -38,7 +38,7 @@
         >
           <template #sticky-sidebar>
             <ToggleHeaderTabs
-              v-if="!!windowIsLarge"
+              v-if="!!windowIsLarge && topic"
               :topic="topic"
               :topics="topics"
               :width="sidePanelWidth"
@@ -57,7 +57,7 @@
               ref="sidePanel"
               class="side-panel"
               :topics="topics"
-              :topicMore="topicMore"
+              :topicMore="Boolean(topicMore)"
               :topicsLoading="topicMoreLoading"
               :width="`${sidePanelWidth}px`"
               :style="sidePanelStyleOverrides"
@@ -110,6 +110,7 @@
                   :key="t.id"
                   :topic="t"
                   :subTopicLoading="t.id === subTopicLoading"
+                  :gridType="gridType"
                   :allowDownloads="allowDownloads"
                   @showMore="handleShowMore"
                   @loadMoreInSubtopic="handleLoadMoreInSubtopic"
@@ -124,7 +125,7 @@
                 :allowDownloads="allowDownloads"
                 data-test="search-results"
                 :contents="resourcesDisplayed"
-                :numCols="numCols"
+                :gridType="gridType"
                 currentCardViewStyle="card"
                 @toggleInfoPanel="toggleInfoPanel"
               />
@@ -187,7 +188,7 @@
             ref="embeddedPanel"
             class="full-screen-side-panel"
             :topics="topics"
-            :topicMore="topicMore"
+            :topicMore="Boolean(topicMore)"
             :topicsLoading="topicMoreLoading"
             :style="sidePanelStyleOverrides"
             @loadMoreTopics="handleLoadMoreInTopic"
@@ -247,7 +248,7 @@
   import lodashGet from 'lodash/get';
   import KBreadcrumbs from 'kolibri-design-system/lib/KBreadcrumbs';
   import { getCurrentInstance, ref, watch } from 'kolibri.lib.vueCompositionApi';
-  import responsiveWindowMixin from 'kolibri.coreVue.mixins.responsiveWindowMixin';
+  import useKResponsiveWindow from 'kolibri-design-system/lib/composables/useKResponsiveWindow';
   import useUser from 'kolibri.coreVue.composables.useUser';
   import { ContentNodeKinds } from 'kolibri.coreVue.vuex.constants';
   import commonCoreStrings from 'kolibri.coreVue.mixins.commonCoreStrings';
@@ -339,7 +340,7 @@
       ImmersivePage,
       DeviceConnectionStatus,
     },
-    mixins: [responsiveWindowMixin, commonCoreStrings, commonLearnStrings],
+    mixins: [commonCoreStrings, commonLearnStrings],
     setup(props) {
       const { canAddDownloads, canDownloadExternally } = useCoreLearn();
       const currentInstance = getCurrentInstance().proxy;
@@ -360,14 +361,41 @@
         currentRoute,
       } = useSearch(topic);
       const { back, genContentLinkKeepCurrentBackLink } = useContentLink();
+      const { windowBreakpoint, windowIsLarge, windowIsSmall } = useKResponsiveWindow();
       const { channelsMap, fetchChannels } = useChannels();
-      const { fetchContentNodeTreeProgress } = useContentNodeProgress();
+      const { fetchContentNodeProgress, fetchContentNodeTreeProgress } = useContentNodeProgress();
       const { isUserLoggedIn, isCoach, isAdmin, isSuperuser } = useUser();
+      const { fetchUserDownloadRequests } = useDownloadRequests(store);
 
       const isRoot = ref(false);
       const channel = ref(null);
       const contents = ref([]);
       const loading = ref(true);
+
+      const _getAllDescendantChildren = topic => {
+        const contentnode_id__in = [];
+        const children = topic.children ? topic.children.results : [];
+        for (const child of children) {
+          if (child.kind === ContentNodeKinds.TOPIC) {
+            contentnode_id__in.push(..._getAllDescendantChildren(child));
+          } else {
+            contentnode_id__in.push(child.id);
+          }
+        }
+        return contentnode_id__in;
+      };
+
+      const fetchRemoteBrowsingContentNodeUserData = topic => {
+        if (get(isUserLoggedIn) && props.deviceId) {
+          const contentnode_id__in = _getAllDescendantChildren(topic);
+          if (contentnode_id__in.length) {
+            if (get(canAddDownloads)) {
+              fetchUserDownloadRequests({ contentnode_id__in });
+            }
+            fetchContentNodeProgress({ ids: contentnode_id__in });
+          }
+        }
+      };
 
       function _handleTopicRedirect(route, children, id, skipped) {
         if (!children.some(c => !c.is_leaf) && route.name !== PageNames.TOPICS_TOPIC_SEARCH) {
@@ -378,7 +406,6 @@
             params: { ...route.params, id },
             query: route.query,
           });
-          return true;
         } else if (skipped) {
           // If we have skipped down the topic tree, replace to the new top level topic
           router.replace({ name: route.name, params: { ...route.params, id }, query: route.query });
@@ -419,7 +446,16 @@
 
             id = childrenResults.id;
 
-            _handleTopicRedirect(route, children, id, skipped);
+            const redirectedToNewTopic = _handleTopicRedirect(route, children, id, skipped);
+
+            if (redirectedToNewTopic) {
+              // If we have encountered the skip logic, we need to reload the topic
+              // with the new id, which will be triggered by our watch statement below
+              // so we can just return here
+              return;
+            }
+
+            fetchRemoteBrowsingContentNodeUserData(fetchedTopic);
 
             set(isRoot, rootTopic);
 
@@ -451,8 +487,6 @@
           if (props.deviceId) {
             promise = setCurrentDevice(props.deviceId).then(device => {
               const baseurl = device.base_url;
-              const { fetchUserDownloadRequests } = useDownloadRequests(store);
-              fetchUserDownloadRequests({ page: 1, pageSize: 100 });
               return _loadTopicsTopic({ baseurl, shouldResolve });
             });
           } else {
@@ -477,6 +511,7 @@
       showTopicsTopic();
 
       return {
+        fetchRemoteBrowsingContentNodeUserData,
         canAddDownloads,
         canDownloadExternally,
         searchTerms,
@@ -491,6 +526,9 @@
         clearSearch,
         back,
         genContentLinkKeepCurrentBackLink,
+        windowBreakpoint,
+        windowIsLarge,
+        windowIsSmall,
         isRoot,
         channel,
         topic,
@@ -530,15 +568,12 @@
     },
     computed: {
       allowDownloads() {
-        return this.canAddDownloads && Boolean(this.deviceId);
+        return this.isUserLoggedIn && this.canAddDownloads && Boolean(this.deviceId);
       },
       barTitle() {
         return this.deviceId
           ? this.learnString('exploreLibraries')
           : (this.topic && this.topic.title) || '';
-      },
-      childrenToDisplay() {
-        return Math.max(this.numCols, 3);
       },
       breadcrumbs() {
         if (!this.topic || !this.topic.ancestors) {
@@ -568,6 +603,12 @@
       },
       resources() {
         return this.contents.filter(content => content.kind !== ContentNodeKinds.TOPIC);
+      },
+      childrenToDisplay() {
+        return this.windowBreakpoint === 2 || this.windowBreakpoint > 4 ? 4 : 3;
+      },
+      gridType() {
+        return this.windowBreakpoint > 4 ? 2 : 1;
       },
       resourcesDisplayed() {
         // if no folders are shown at this level, show more resources to fill the space
@@ -619,6 +660,7 @@
             // showMore is whether we should show more inline
             const showMore =
               !this.subTopicId &&
+              this.topics.length != 1 &&
               topicChildren.length > this.childrenToDisplay &&
               !this.expandedTopics[t.id];
 
@@ -663,7 +705,7 @@
       sidePanelWidth() {
         if (!this.windowIsLarge) {
           return 0;
-        } else if (this.windowBreakpoint < 4) {
+        } else if (this.windowBreakpoint < 5) {
           return 234;
         } else {
           return 346;
@@ -695,15 +737,6 @@
           style.marginLeft = `${this.sidePanelWidth + 24}px`;
         }
         return style;
-      },
-      numCols() {
-        if (this.windowBreakpoint > 1 && this.windowBreakpoint < 2) {
-          return 2;
-        } else if (this.windowBreakpoint >= 2 && this.windowBreakpoint <= 4) {
-          return 3;
-        } else if (this.windowBreakpoint > 4) {
-          return 4;
-        } else return null;
       },
       throttledStickyCalculation() {
         return throttle(this.stickyCalculation);
@@ -827,7 +860,7 @@
         const parent = parentIndex > -1 ? this.contents[parentIndex] : null;
         const more = parent && parent.children && parent.children.more;
         if (more) {
-          if (this.isUserLoggedIn) {
+          if (this.isUserLoggedIn && !this.deviceId) {
             this.fetchContentNodeTreeProgress(more);
           }
           return ContentNodeResource.fetchTree(more)
@@ -840,6 +873,7 @@
                 child,
                 ...this.contents.slice(parentIndex + 1),
               ];
+              this.fetchRemoteBrowsingContentNodeUserData(data);
             })
             .catch(err => {
               this.$store.dispatch('handleApiError', { error: err });
@@ -855,7 +889,7 @@
       loadMoreTopics() {
         const more = this.topic.children.more;
         if (more) {
-          if (this.isUserLoggedIn) {
+          if (this.isUserLoggedIn && !this.deviceId) {
             this.fetchContentNodeTreeProgress(more);
           }
           return ContentNodeResource.fetchTree(more)
@@ -868,6 +902,7 @@
                   more: data.children.more,
                 },
               };
+              this.fetchRemoteBrowsingContentNodeUserData(data);
             })
             .catch(err => {
               this.$store.dispatch('handleApiError', { error: err });
@@ -970,6 +1005,7 @@
 
   .end-button-block {
     width: 100%;
+    padding-bottom: 16px;
     margin-top: 16px;
     text-align: center;
   }

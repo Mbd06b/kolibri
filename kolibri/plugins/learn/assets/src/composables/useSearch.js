@@ -21,8 +21,8 @@ import {
   ResourcesNeededTypes,
 } from 'kolibri.coreVue.vuex.constants';
 import { deduplicateResources } from '../utils/contentNode';
+import { currentDeviceData } from './useDevices';
 import useContentNodeProgress from './useContentNodeProgress';
-import useDevices from './useDevices';
 import { setLanguages } from './useLanguages';
 
 export const logging = logger.getLogger(__filename);
@@ -60,17 +60,36 @@ function _generateResourcesNeeded(learnerNeeds) {
   return resourcesNeeded;
 }
 
+const gradeLevelsShown = [
+  'BASIC_SKILLS',
+  'PRESCHOOL',
+  'LOWER_PRIMARY',
+  'UPPER_PRIMARY',
+  'LOWER_SECONDARY',
+  'UPPER_SECONDARY',
+  'TERTIARY',
+  'PROFESSIONAL',
+  'WORK_SKILLS',
+];
+
 function _generateGradeLevelsList(gradeLevels) {
-  return Object.keys(ContentLevels).filter(key => {
-    const value = ContentLevels[key];
-    return gradeLevels && gradeLevels.includes(value);
+  return gradeLevelsShown.filter(key => {
+    return gradeLevels && gradeLevels.includes(ContentLevels[key]);
   });
 }
 
+const accessibilityLabelsShown = [
+  'SIGN_LANGUAGE',
+  'AUDIO_DESCRIPTION',
+  'TAGGED_PDF',
+  'ALT_TEXT',
+  'HIGH_CONTRAST',
+  'CAPTIONS_SUBTITLES',
+];
+
 function _generateAccessibilityOptionsList(accessibilityLabels) {
-  return Object.keys(AccessibilityCategories).filter(key => {
-    const value = AccessibilityCategories[key];
-    return accessibilityLabels && accessibilityLabels.includes(value);
+  return accessibilityLabelsShown.filter(key => {
+    return accessibilityLabels && accessibilityLabels.includes(AccessibilityCategories[key]);
   });
 }
 
@@ -158,7 +177,7 @@ export default function useSearch(descendant, store, router) {
   const more = ref(null);
   const labels = ref(null);
 
-  const { baseurl } = useDevices(store);
+  const { baseurl } = currentDeviceData(store);
 
   const searchTerms = computed({
     get() {

@@ -13,7 +13,9 @@ from django.db.models.query import Q
 from django.http import Http404
 from django.http.response import HttpResponseBadRequest
 from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.utils.translation import get_language
+from django.views.decorators.csrf import csrf_protect
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters.rest_framework import FilterSet
 from django_filters.rest_framework import ModelChoiceFilter
@@ -24,7 +26,9 @@ from rest_framework import mixins
 from rest_framework import status
 from rest_framework import views
 from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.serializers import Serializer
 
 import kolibri
 from .models import DevicePermissions
@@ -47,12 +51,14 @@ from kolibri.core.auth.models import FacilityUser
 from kolibri.core.content.models import ContentDownloadRequest
 from kolibri.core.content.models import ContentRemovalRequest
 from kolibri.core.content.models import ContentRequestReason
+from kolibri.core.content.models import ContentRequestStatus
 from kolibri.core.content.permissions import CanManageContent
 from kolibri.core.content.utils.channels import get_mounted_drive_by_id
 from kolibri.core.content.utils.channels import get_mounted_drives_with_channel_info
+from kolibri.core.device.models import SyncQueueStatus
 from kolibri.core.device.permissions import IsSuperuser
 from kolibri.core.device.utils import get_device_setting
-from kolibri.core.discovery.models import DynamicNetworkLocation
+from kolibri.core.discovery.models import NetworkLocation
 from kolibri.core.fields import DateTimeTzField
 from kolibri.core.public.constants.user_sync_options import DELAYED_SYNC
 from kolibri.core.public.constants.user_sync_statuses import INSUFFICIENT_STORAGE
@@ -90,6 +96,7 @@ class DevicePermissionsViewSet(viewsets.ModelViewSet):
     filter_backends = (KolibriAuthPermissionsFilter,)
 
 
+@method_decorator(csrf_protect, name="dispatch")
 class DeviceProvisionView(viewsets.GenericViewSet):
     permission_classes = (NotProvisionedCanPost,)
     serializer_class = DeviceProvisionSerializer
@@ -115,7 +122,19 @@ class DeviceProvisionView(viewsets.GenericViewSet):
 
 
 class FreeSpaceView(mixins.ListModelMixin, viewsets.GenericViewSet):
-    permission_classes = (CanManageContent,)
+    permission_classes = (IsAuthenticated,)
+
+    def get_serializer_class(self):
+        """
+        Add this purely to avoid warnings from DRF YASG schema generation.
+        """
+        return Serializer
+
+    def get_queryset(self):
+        """
+        Add this purely to avoid warnings from DRF YASG schema generation.
+        """
+        return None
 
     def list(self, request):
         path = request.query_params.get("path")
@@ -263,7 +282,7 @@ def map_status(record):
     transfer_status = record.pop("transfer_status", None)
     device_status = record.get("device_status")
     device_status_sentiment = record.get("device_status_sentiment")
-    queued = record.pop("queued", None)
+    sync_status = record.pop("status", None)
     recent = record["last_synced"] and (
         timezone.now() - record["last_synced"] < sync_diff
     )
@@ -282,7 +301,7 @@ def map_status(record):
         ):
             return UNABLE_TO_SYNC
         return RECENTLY_SYNCED
-    elif queued:
+    elif sync_status == SyncQueueStatus.Queued:
         return QUEUED
     return NOT_RECENTLY_SYNCED
 
@@ -291,10 +310,10 @@ class UserSyncStatusViewSet(ReadOnlyValuesViewset):
     permission_classes = (KolibriAuthPermissions,)
     filter_backends = (KolibriAuthPermissionsFilter, DjangoFilterBackend)
     queryset = UserSyncStatus.objects.all()
-    filter_class = SyncStatusFilter
+    filterset_class = SyncStatusFilter
 
     values = (
-        "queued",
+        "status",
         "last_synced",
         "transfer_status",
         "device_status",
@@ -302,6 +321,7 @@ class UserSyncStatusViewSet(ReadOnlyValuesViewset):
         "user",
         "has_downloads",
         "last_download_removed",
+        "sync_downloads_in_progress",
     )
 
     field_map = {
@@ -313,7 +333,7 @@ class UserSyncStatusViewSet(ReadOnlyValuesViewset):
         # if there are no possible devices we could sync to.
         if (
             get_device_setting("subset_of_users_device")
-            and not DynamicNetworkLocation.objects.filter(
+            and not NetworkLocation.objects.filter(
                 subset_of_users_device=False
             ).exists()
         ):
@@ -323,7 +343,7 @@ class UserSyncStatusViewSet(ReadOnlyValuesViewset):
     def annotate_queryset(self, queryset):
 
         queryset = queryset.annotate(
-            last_synced=F("sync_session__last_activity_timestamp")
+            last_synced=F("sync_session__last_activity_timestamp"),
         )
 
         most_recent_sync_status = (
@@ -338,11 +358,37 @@ class UserSyncStatusViewSet(ReadOnlyValuesViewset):
             instance_id=OuterRef("sync_session__client_instance_id"),
         )
 
+        # Use the same condition used in the ContentRequest API endpoint
+        # otherwise, this will signal that users have downloads
+        # but when they navigate to the Downloads page, they may not see
+        # any downloads.
+        downloads_without_removals_queryset = ContentDownloadRequest.objects.annotate(
+            has_removal=Exists(
+                ContentRemovalRequest.objects.filter(
+                    source_model=OuterRef("source_model"),
+                    source_id=OuterRef("source_id"),
+                    contentnode_id=OuterRef("contentnode_id"),
+                    requested_at__gte=OuterRef("requested_at"),
+                    reason=OuterRef("reason"),
+                ).exclude(status=ContentRequestStatus.Failed)
+            )
+        ).filter(has_removal=False)
+
         has_download = Exists(
-            ContentDownloadRequest.objects.filter(
+            downloads_without_removals_queryset.filter(
                 source_id=OuterRef("user_id"),
                 source_model=FacilityUser.morango_model_name,
                 reason=ContentRequestReason.UserInitiated,
+            )
+        )
+
+        has_in_progress_sync_initiated_download = Exists(
+            downloads_without_removals_queryset.filter(
+                source_id=OuterRef("user_id"),
+                source_model=FacilityUser.morango_model_name,
+                reason=ContentRequestReason.SyncInitiated,
+            ).exclude(
+                status__in=[ContentRequestStatus.Failed, ContentRequestStatus.Completed]
             )
         )
 
@@ -366,6 +412,7 @@ class UserSyncStatusViewSet(ReadOnlyValuesViewset):
             ),
             has_downloads=has_download,
             last_download_removed=last_download_removal,
+            sync_downloads_in_progress=has_in_progress_sync_initiated_download,
         )
         return queryset
 

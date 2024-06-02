@@ -1,8 +1,18 @@
 import { createTranslator } from 'kolibri.utils.i18n';
 
 export const enhancedQuizManagementStrings = createTranslator('EnhancedQuizManagementStrings', {
+  selectAllLabel: {
+    message: 'Select all',
+  },
+  sectionLabel: {
+    message: 'Section',
+  },
   createNewQuiz: {
     message: 'Create new quiz',
+  },
+  quizSectionsLabel: {
+    message: 'Quiz sections',
+    context: 'Used as an aria-label for screen readers to describe the purpose of the list of tabs',
   },
   quizTitle: {
     message: 'Quiz title',
@@ -52,9 +62,6 @@ export const enhancedQuizManagementStrings = createTranslator('EnhancedQuizManag
   currentSection: {
     message: 'Current section',
   },
-  deleteSection: {
-    message: 'Delect section',
-  },
   applySettings: {
     message: 'Apply settings',
   },
@@ -70,7 +77,7 @@ export const enhancedQuizManagementStrings = createTranslator('EnhancedQuizManag
   numberOfSelectedQuestions: {
     message: '{count, number} {count, plural, one {question selected} other {questions selected}}',
   },
-  replqceQuestions: {
+  replaceQuestions: {
     message: 'Replace questions',
   },
   changeResources: {
@@ -88,11 +95,8 @@ export const enhancedQuizManagementStrings = createTranslator('EnhancedQuizManag
   expandAll: {
     message: 'Expand all',
   },
-  replace: {
+  replaceAction: {
     message: 'Replace',
-  },
-  replaceQuestions: {
-    message: 'Replace questions',
   },
   replaceQuestionsExplaination: {
     message: 'The new questions you selected will replace the current ones.',
@@ -107,22 +111,93 @@ export const enhancedQuizManagementStrings = createTranslator('EnhancedQuizManag
     message:
       'Please choose a different resource or decrease the number of questions to be replaced.',
   },
+  questionOrder: {
+    message: 'Question order',
+  },
+  randomizedLabel: {
+    message: 'Randomized',
+  },
+  selectFromBookmarks: {
+    message: 'Select from bookmarks',
+  },
+  randomizedOptionDescription: {
+    message: 'Each learner sees a different question order',
+  },
+  fixedLabel: {
+    message: 'Fixed',
+  },
+  fixedOptionDescription: {
+    message: 'Each learner sees the same question order',
+  },
   questionEditedSuccessfully: {
     message: 'Question edited successfully',
   },
   reviewSelectedResources: {
     message: 'Review selected resources',
   },
+  deleteConfirmation: {
+    message: "Are you sure you want to delete section '{section_title}'?",
+    context:
+      'A warning message that appears when the user tries to leave the page without saving their work',
+  },
+  closeConfirmationTitle: {
+    message: 'Are you sure you want to leave this page?',
+    context:
+      'The title of a confirmation modal informing the user that they will lose their work if they leave the page',
+  },
+  closeConfirmationMessage: {
+    message: 'You will lose any unsaved edits to your work',
+    context:
+      'The body of a confirmation modal informing the user that they will lose their work if they leave the page',
+  },
+
   numberOfSelectedResources: {
     message:
-      '{ count, number } { count, plural, one { resource selected } other { resources selected }} from { count, number } { count, plural, one { channel } other { channels }}',
+      '{ count, number } { count, plural, one { resource selected } other { resources selected }} from { channels, number } { channels, plural, one { channel } other { channels }}',
   },
   numberOfSelectedReplacements: {
     message:
-      '{ count, number } of{ count, number } {count, plural, one {question selected} other {questions selected}}',
+      '{ count, number } of { total, number } {total, plural, one {replacement selected} other {replacements selected}}',
   },
   numberOfQuestionsReplaced: {
     message:
       '{ count, number } { count, plural, one { question successfully replaced } other { questions successfully replaced }} ',
+  },
+  numberOfResourcesSelected: {
+    message: '{count, number} {count, plural, one {resource selected} other {resources selected}}',
+  },
+  selectedResourcesInformation: {
+    message:
+      '{count, number, integer} of {total, number, integer} {total, plural, one {question selected} other {questions selected}}',
+  },
+  selectMoreQuestion: {
+    message:
+      'Select { count } more { count, plural , one { question } other { questions }} to continue',
+  },
+  selectFewerQuestion: {
+    message:
+      'Select { count } fewer { count, plural ,one { question } other { questions }} to continue',
+  },
+  cannotSelectSomeTopicWarning: {
+    message:
+      'You can only select folders with 12 or less exercises and no subfolders to avoid oversized quizzes.',
+  },
+  changesSavedSuccessfully: {
+    message: 'Changes saved successfully',
+    context: 'A snackbar message that appears when the user saves their changes',
+  },
+  sectionDeletedNotification: {
+    message: "Section '{ section_title }' deleted",
+    context: 'A snackbar message that appears when the user deletes a section',
+  },
+  questionsDeletedNotification: {
+    message: '{ count, number } { count, plural, one { question } other { questions }} deleted',
+    context: 'A snackbar message that appears when the user deletes questions',
+  },
+  updateResources: {
+    message: 'Update resources',
+  },
+  allSectionsEmptyWarning: {
+    message: "You don't have any questions in the quiz",
   },
 });
