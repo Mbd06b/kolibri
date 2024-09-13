@@ -86,5 +86,5 @@ commands:
         kind: test
 
 events:
-  preStart:
+  postStart:
     - install-dependencies
