@@ -3,10 +3,12 @@ metadata:
   name: kolibri
 projects:
   - name: kolibri
-    source:
-      type: git
-      location: "https://github.com/Mbd06b/kolibri.git"
-      branch: "main-dev"
+    git:
+      remotes:
+        origin: "https://github.com/Mbd06b/kolibri.git"
+      checkoutFrom:
+        remote: origin
+        revision: "main-dev"
 components:
   - name: dev-env
     container:
