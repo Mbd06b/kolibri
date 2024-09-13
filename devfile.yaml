@@ -3,62 +3,86 @@ metadata:
   name: kolibri
 projects:
   - name: kolibri
-    git:
-      remotes:
-        origin: "https://github.com/Mbd06b/kolibri.git"
+    source:
+      type: git
+      location: "https://github.com/Mbd06b/kolibri.git"
+      branch: "main-dev"
 components:
-  - name: tools
+  - name: dev-env
     container:
-      image: registry.access.redhat.com/ubi8/nodejs-16:latest
-      args: ['tail', '-f', '/dev/null']
+      image: mcr.microsoft.com/vscode/devcontainers/python:3.9-node16
+      memoryLimit: 4Gi
+      mountSources: true
+      command: ["tail"]
+      args: ["-f", "/dev/null"]
       env:
         - name: DEBUG_PORT
           value: '5858'
       endpoints:
-        - name: http-node
-          targetPort: 8000
-          protocol: http
+        - name: kolibri
+          targetPort: 8080
           exposure: public
+          protocol: http
+        - name: devserver
+          targetPort: 8000
+          exposure: public
+          protocol: http
         - name: debug
-          exposure: none
           targetPort: 5858
-      memoryLimit: 1G
-      mountSources: true
+          exposure: none
+          protocol: tcp
 commands:
   - id: install-dependencies
     exec:
-      label: "Install all required dependencies"
-      component: tools
-      workingDir: ${PROJECT_SOURCE}
-      commandLine: "yarn install"
+      label: "Install Python and Node.js dependencies"
+      component: dev-env
+      workingDir: "/projects/kolibri"
+      commandLine: >
+        pip install --upgrade pip &&
+        pip install -r requirements.txt &&
+        pip install -e . &&
+        npm install -g yarn &&
+        yarn install
       group:
         kind: build
         isDefault: true
 
-  - id: build
+  - id: build-assets
     exec:
-      label: "Build the app"
-      component: tools
-      workingDir: ${PROJECT_SOURCE}
-      commandLine: "yarn build"
+      label: "Build frontend assets"
+      component: dev-env
+      workingDir: "/projects/kolibri"
+      commandLine: "yarn run build"
       group:
         kind: build
-        isDefault: true
 
-  - id: run
+  - id: run-kolibri
     exec:
-      label: "Run the web app"
-      component: tools
-      workingDir: ${PROJECT_SOURCE}
+      label: "Run Kolibri Server"
+      component: dev-env
+      workingDir: "/projects/kolibri"
+      commandLine: "kolibri start --foreground"
+      group:
+        kind: run
+
+  - id: run-devserver
+    exec:
+      label: "Run Webpack Dev Server"
+      component: dev-env
+      workingDir: "/projects/kolibri"
       commandLine: "yarn run devserver"
       group:
         kind: run
 
   - id: test
     exec:
-      label: "Launch tests"
-      component: tools
-      workingDir: ${PROJECT_SOURCE}
+      label: "Run Tests"
+      component: dev-env
+      workingDir: "/projects/kolibri"
       commandLine: "yarn test"
       group:
         kind: test
+
+events:
+  preStart:
+    - install-dependencies
