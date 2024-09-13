@@ -5,9 +5,13 @@ import { ref } from 'kolibri.lib.vueCompositionApi';
 import { ContentNodeResource } from 'kolibri.resources';
 import { coreStoreFactory } from 'kolibri.coreVue.vuex.store';
 import { AllCategories, NoCategories } from 'kolibri.coreVue.vuex.constants';
+import useUser, { useUserMock } from 'kolibri.coreVue.composables.useUser';
 import useSearch from '../useSearch';
+import coreModule from '../../../../../../core/assets/src/state/modules/core';
 
 Vue.use(VueRouter);
+
+jest.mock('kolibri.coreVue.composables.useUser');
 
 const name = 'not important';
 
@@ -25,6 +29,7 @@ function prep(query = {}, descendant = null) {
       },
     },
   });
+  store.registerModule('core', coreModule);
   const router = new VueRouter();
   router.push = jest.fn().mockReturnValue(Promise.resolve());
   return {
@@ -38,6 +43,7 @@ describe(`useSearch`, () => {
   beforeEach(() => {
     ContentNodeResource.fetchCollection = jest.fn();
     ContentNodeResource.fetchCollection.mockReturnValue(Promise.resolve({}));
+    useUser.mockImplementation(() => useUserMock());
   });
   describe(`searchTerms computed ref`, () => {
     it(`returns an object with all relevant keys when query params are empty`, () => {
@@ -288,7 +294,7 @@ describe(`useSearch`, () => {
           categories: `test1,test2`,
           channels: 'test1',
         },
-        ref({ tree_id: 1, lft: 10, rght: 20 })
+        ref({ tree_id: 1, lft: 10, rght: 20 }),
       );
       ContentNodeResource.fetchCollection.mockReturnValue(Promise.resolve({}));
       search();
@@ -331,7 +337,7 @@ describe(`useSearch`, () => {
           labels: expectedLabels,
           results: expectedResults,
           more: expectedMore,
-        })
+        }),
       );
       search();
       await Vue.nextTick();
@@ -391,7 +397,7 @@ describe(`useSearch`, () => {
           labels: expectedLabels,
           results: originalResults,
           more: expectedMore,
-        })
+        }),
       );
       search();
       await Vue.nextTick();
@@ -401,7 +407,7 @@ describe(`useSearch`, () => {
           labels: expectedLabels,
           results: expectedResults,
           more: expectedMore,
-        })
+        }),
       );
       set(more, {});
       searchMore();

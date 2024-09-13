@@ -1,7 +1,6 @@
 <template>
 
   <div>
-
     <template v-if="sessionReady">
       <ContentRenderer
         v-if="!content.assessmentmetadata"
@@ -104,12 +103,14 @@
 <script>
 
   import get from 'lodash/get';
-  import { mapState, mapGetters } from 'vuex';
+  import { mapState } from 'vuex';
   import { ref } from 'kolibri.lib.vueCompositionApi';
   import { ContentNodeResource } from 'kolibri.resources';
   import useKResponsiveWindow from 'kolibri-design-system/lib/composables/useKResponsiveWindow';
   import router from 'kolibri.coreVue.router';
   import Modalities from 'kolibri-constants/Modalities';
+  import useUser from 'kolibri.coreVue.composables.useUser';
+  import useSnackbar from 'kolibri.coreVue.composables.useSnackbar';
   import { setContentNodeProgress } from '../composables/useContentNodeProgress';
   import useProgressTracking from '../composables/useProgressTracking';
   import useContentLink from '../composables/useContentLink';
@@ -159,6 +160,8 @@
         return Promise.resolve();
       };
       const { windowIsSmall } = useKResponsiveWindow();
+      const { isUserLoggedIn, currentUserId, full_name } = useUser();
+      const { createSnackbar } = useSnackbar();
       return {
         errored,
         progress,
@@ -174,6 +177,10 @@
         stopTracking: stopTrackingProgress,
         genContentLinkKeepCurrentBackLink,
         windowIsSmall,
+        isUserLoggedIn,
+        currentUserId,
+        full_name,
+        createSnackbar,
       };
     },
     props: {
@@ -205,13 +212,10 @@
         showCompletionModal: false,
         wasComplete: false,
         sessionReady: false,
+        fullName: this.full_name,
       };
     },
     computed: {
-      ...mapGetters(['isUserLoggedIn', 'currentUserId']),
-      ...mapState({
-        fullName: state => state.core.session.full_name,
-      }),
       ...mapState(['showCompleteContentModal']),
       practiceQuiz() {
         return get(this, ['content', 'options', 'modality']) === Modalities.QUIZ;
@@ -266,7 +270,7 @@
         this.displayCompletionModal();
         return this.updateProgress(1.0)
           .then(() => {
-            this.$store.dispatch('createSnackbar', this.learnString('resourceCompletedLabel'));
+            this.createSnackbar(this.learnString('resourceCompletedLabel'));
           })
           .catch(error => {
             this.$store.dispatch('handleApiError', { error });
@@ -277,7 +281,7 @@
         return ContentNodeResource.fetchModel({ id })
           .then(contentNode => {
             router.push(
-              this.genContentLinkKeepCurrentBackLink(contentNode.id, contentNode.is_leaf)
+              this.genContentLinkKeepCurrentBackLink(contentNode.id, contentNode.is_leaf),
             );
           })
           .catch(error => {

@@ -6,11 +6,13 @@ import KCircularLoader from 'kolibri-design-system/lib/loaders/KCircularLoader';
 import useKResponsiveWindow from 'kolibri-design-system/lib/composables/useKResponsiveWindow';
 import { ContentNodeResource } from 'kolibri.resources';
 import useUser from 'kolibri.coreVue.composables.useUser';
+/* eslint-disable import/named */
+import useBaseSearch, { useBaseSearchMock } from 'kolibri-common/composables/useBaseSearch';
+/* eslint-enable import/named */
 import { PageNames } from '../../src/constants';
 import LibraryPage from '../../src/views/LibraryPage';
 import OtherLibraries from '../../src/views/LibraryPage/OtherLibraries';
 /* eslint-disable import/named */
-import useSearch, { useSearchMock } from '../../src/composables/useSearch';
 import useChannels, { useChannelsMock } from '../../src/composables/useChannels';
 import usePinnedDevices, { usePinnedDevicesMock } from '../../src/composables/usePinnedDevices';
 import useDevices, { useDevicesMock } from '../../src/composables/useDevices';
@@ -39,11 +41,11 @@ const CHANNEL = {
 jest.mock('../../src/composables/useChannels');
 jest.mock('../../src/composables/useCardLayoutSpan');
 jest.mock('../../src/composables/useDevices');
-jest.mock('../../src/composables/useSearch');
 jest.mock('../../src/composables/useLearnerResources');
 jest.mock('../../src/composables/useLearningActivities');
 jest.mock('../../src/composables/useContentLink');
 jest.mock('../../src/composables/usePinnedDevices');
+jest.mock('kolibri-common/composables/useBaseSearch');
 jest.mock('kolibri.coreVue.composables.useUser');
 jest.mock('kolibri-design-system/lib/composables/useKResponsiveWindow');
 jest.mock('kolibri.resources');
@@ -89,10 +91,10 @@ describe('LibraryPage', () => {
           [CHANNEL_ID]: CHANNEL,
         },
         fetchChannels: jest.fn(() => Promise.resolve([CHANNEL])),
-      })
+      }),
     );
     ContentNodeResource.fetchCollection.mockImplementation(() =>
-      Promise.resolve([{ id: 'test', title: 'test', channel_id: CHANNEL_ID }])
+      Promise.resolve([{ id: 'test', title: 'test', channel_id: CHANNEL_ID }]),
     );
   });
   describe('filters button', () => {
@@ -147,9 +149,9 @@ describe('LibraryPage', () => {
 
   describe('displaying channels and recent/popular content ', () => {
     beforeAll(() => {
-      useSearch.mockImplementation(() => useSearchMock({ displayingSearchResults: false }));
+      useBaseSearch.mockImplementation(() => useBaseSearchMock({ displayingSearchResults: false }));
     });
-    /** useSearch#displayingSearchResults is falsy and there are rootNodes */
+    /** useBaseSearch#displayingSearchResults is falsy and there are rootNodes */
     it('displays a grid of channel cards', async () => {
       const wrapper = await makeWrapper();
       expect(wrapper.find('[data-test="channels"').element).toBeTruthy();
@@ -164,7 +166,7 @@ describe('LibraryPage', () => {
 
   describe('when page is loading', () => {
     it('shows a KCircularLoader', async () => {
-      useSearch.mockImplementation(() => useSearchMock({ searchLoading: true }));
+      useBaseSearch.mockImplementation(() => useBaseSearchMock({ searchLoading: true }));
       const wrapper = await makeWrapper();
       expect(wrapper.findComponent(KCircularLoader).exists()).toBeTruthy();
     });
@@ -172,7 +174,7 @@ describe('LibraryPage', () => {
 
   describe('nothing in library label', () => {
     beforeAll(() => {
-      useSearch.mockImplementation(() => useSearchMock({ displayingSearchResults: false }));
+      useBaseSearch.mockImplementation(() => useBaseSearchMock({ displayingSearchResults: false }));
     });
     it('display when no channels are available', async () => {
       const wrapper = await makeWrapper({ rootNodes: [] });
@@ -189,7 +191,7 @@ describe('LibraryPage', () => {
 
   describe('Resumable content', () => {
     beforeAll(() => {
-      useSearch.mockImplementation(() => useSearchMock({ displayingSearchResults: false }));
+      useBaseSearch.mockImplementation(() => useBaseSearchMock({ displayingSearchResults: false }));
     });
     it('show content', async () => {
       const wrapper = await makeWrapper();
@@ -233,7 +235,7 @@ describe('LibraryPage', () => {
     }
     beforeEach(() => {
       useUser.mockImplementation(() => ({ isUserLoggedIn: true }));
-      useSearch.mockImplementation(() => useSearchMock({ displayingSearchResults: false }));
+      useBaseSearch.mockImplementation(() => useBaseSearchMock({ displayingSearchResults: false }));
     });
 
     it('show other libraries', async () => {
@@ -247,7 +249,7 @@ describe('LibraryPage', () => {
         await wrapper.setData({ searchingOtherLibraries: true });
         expect(wrapper.find('[data-test="searching"').isVisible()).toBe(true);
         expect(wrapper.find('[data-test="searching-label"').text()).toEqual(
-          translations.searchingOtherLibrary
+          translations.searchingOtherLibrary,
         );
       });
       it('display "showing all" label', async () => {
@@ -261,7 +263,7 @@ describe('LibraryPage', () => {
         await wrapper.setData({ searchingOtherLibraries: false });
         expect(wrapper.find('[data-test="showing-all"').isVisible()).toBe(true);
         expect(wrapper.find('[data-test="showing-all-label"').text()).toEqual(
-          translations.showingAllLibraries
+          translations.showingAllLibraries,
         );
       });
       it('display "no other" label', async () => {
@@ -269,7 +271,7 @@ describe('LibraryPage', () => {
         await wrapper.setData({ searchingOtherLibraries: false });
         expect(wrapper.find('[data-test="no-other"').isVisible()).toBe(true);
         expect(wrapper.find('[data-test="no-other-label"').text()).toEqual(
-          translations.noOtherLibraries
+          translations.noOtherLibraries,
         );
       });
       it('display "pinned" label', async () => {
@@ -279,15 +281,15 @@ describe('LibraryPage', () => {
             unpinnedDevicesExist: jest.fn(() => true),
             pinnedDevices: [{ instance_id: '1' }],
             unpinnedDevices: [{ instance_id: '2' }, { instance_id: '3' }, { instance_id: '4' }],
-          })
+          }),
         );
         useDevices.mockImplementation(() =>
           useDevicesMock({
             deviceChannelsMap: {
-              '1': [CHANNEL],
-              '2': [CHANNEL],
-              '3': [CHANNEL],
-              '4': [CHANNEL],
+              1: [CHANNEL],
+              2: [CHANNEL],
+              3: [CHANNEL],
+              4: [CHANNEL],
             },
             networkDevicesWithChannels: [
               { instance_id: '1' },
@@ -295,7 +297,7 @@ describe('LibraryPage', () => {
               { instance_id: '3' },
               { instance_id: '4' },
             ],
-          })
+          }),
         );
         wrapper = await makeOtherLibrariesWrapper();
         const pinnedLabel = wrapper.find('[data-test="pinned-label"');
@@ -310,15 +312,15 @@ describe('LibraryPage', () => {
             unpinnedDevicesExist: jest.fn(() => true),
             pinnedDevices: [{ instance_id: '1' }],
             unpinnedDevices: [{ instance_id: '2' }, { instance_id: '3' }, { instance_id: '4' }],
-          })
+          }),
         );
         useDevices.mockImplementation(() =>
           useDevicesMock({
             deviceChannelsMap: {
-              '1': [CHANNEL],
-              '2': [CHANNEL],
-              '3': [CHANNEL],
-              '4': [CHANNEL],
+              1: [CHANNEL],
+              2: [CHANNEL],
+              3: [CHANNEL],
+              4: [CHANNEL],
             },
             networkDevicesWithChannels: [
               { instance_id: '1' },
@@ -326,7 +328,7 @@ describe('LibraryPage', () => {
               { instance_id: '3' },
               { instance_id: '4' },
             ],
-          })
+          }),
         );
         wrapper = await makeOtherLibrariesWrapper();
         const moreLabel = wrapper.find('[data-test="more-label"');
@@ -339,7 +341,7 @@ describe('LibraryPage', () => {
 
   describe('SearchResultsGrid', () => {
     beforeEach(() => {
-      useSearch.mockImplementation(() => useSearchMock({ displayingSearchResults: true }));
+      useBaseSearch.mockImplementation(() => useBaseSearchMock({ displayingSearchResults: true }));
     });
     it('display search results grid', async () => {
       const wrapper = await makeWrapper();

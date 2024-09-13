@@ -7,7 +7,7 @@
       :progressFilter.sync="progressFilter"
       :enabledFilters="enabledFilters"
     />
-    <br>
+    <br >
 
     <div class="notifications">
       <p v-if="!loading && notifications.length === 0">
@@ -154,9 +154,6 @@
           const params = {
             ...this.filterParam,
           };
-          if (this.notifications.length) {
-            params.before = this.notifications.slice(-1)[0].id;
-          }
           this.moreNotificationsForClass(params).then(moreResults => {
             this.moreResults = moreResults;
             this.loading = false;

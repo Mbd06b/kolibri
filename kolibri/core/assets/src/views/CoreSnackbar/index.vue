@@ -4,9 +4,16 @@
     <template v-if="backdrop">
       <Backdrop class="snackbar-backdrop" />
       <!-- Prevent focus from leaving the this container -->
-      <div tabindex="0" @focus="trapFocus"></div>
+      <div
+        tabindex="0"
+        @focus="trapFocus"
+      ></div>
     </template>
-    <transition name="snackbar" @leave-to="clearSnackbar" @enter="handleOnEnter">
+    <transition
+      name="snackbar"
+      @leave-to="clearSnackbar"
+      @enter="handleOnEnter"
+    >
       <UiSnackbar
         v-show="isVisible"
         id="coresnackbar"
@@ -19,7 +26,10 @@
         @action-click="handleActionClick"
       >
         <template #inner-focus-trap>
-          <div tabindex="0" @focus="trapFocus"></div>
+          <div
+            tabindex="0"
+            @focus="trapFocus"
+          ></div>
         </template>
       </UiSnackbar>
     </transition>
@@ -30,9 +40,9 @@
 
 <script>
 
-  import { mapActions } from 'vuex';
   import UiSnackbar from 'kolibri-design-system/lib/keen/UiSnackbar.vue';
   import Backdrop from 'kolibri.coreVue.components.Backdrop';
+  import useSnackbar from 'kolibri.coreVue.composables.useSnackbar';
 
   /* Snackbars are used to display notification. */
   export default {
@@ -40,6 +50,10 @@
     components: {
       Backdrop,
       UiSnackbar,
+    },
+    setup() {
+      const { clearSnackbar } = useSnackbar();
+      return { clearSnackbar };
     },
     props: {
       /* Text of notification to be displayed */
@@ -109,7 +123,6 @@
       }
     },
     methods: {
-      ...mapActions(['clearSnackbar']),
       hideSnackbar() {
         this.isVisible = false;
         this.$emit('hide');

@@ -1,11 +1,10 @@
 <template>
 
-  <CoachAppBarPage
-    :authorized="$store.getters.userIsAuthorizedForCoach"
-    authorizedRole="adminOrCoach"
-  >
-
-    <KGrid gutter="16">
+  <CoachAppBarPage>
+    <KGrid
+      v-if="exam"
+      gutter="16"
+    >
       <KGridItem>
         <QuizLessonDetailsHeader
           :backlink="$router.getRoute('EXAMS')"
@@ -15,6 +14,7 @@
           <template #dropdown>
             <QuizOptionsDropdownMenu
               optionsFor="plan"
+              :draft="exam && exam.draft"
               @select="setCurrentAction"
             />
           </template>
@@ -46,9 +46,7 @@
             </p>
 
             <QuestionListPreview
-              :fixedOrder="!quizIsRandomized"
-              :readOnly="true"
-              :selectedQuestions="selectedQuestions"
+              :sections="quiz.question_sources || []"
               :selectedExercises="selectedExercises"
             />
           </section>
@@ -75,6 +73,10 @@
   import { ERROR_CONSTANTS } from 'kolibri.coreVue.vuex.constants';
   import CatchErrors from 'kolibri.utils.CatchErrors';
   import commonCoreStrings from 'kolibri.coreVue.mixins.commonCoreStrings';
+  import { ExamResource } from 'kolibri.resources';
+  import { enhancedQuizManagementStrings } from 'kolibri-common/strings/enhancedQuizManagementStrings';
+  import useSnackbar from 'kolibri.coreVue.composables.useSnackbar';
+  import { PageNames } from '../../../constants';
   import commonCoach from '../../common';
   import CoachAppBarPage from '../../CoachAppBarPage';
   import QuestionListPreview from '../CreateExamPage/QuestionListPreview';
@@ -97,6 +99,17 @@
       QuizOptionsDropdownMenu,
     },
     mixins: [commonCoach, coachStringsMixin, commonCoreStrings],
+    setup() {
+      const { randomizedSectionOptionDescription$, fixedSectionOptionDescription$ } =
+        enhancedQuizManagementStrings;
+      const { createSnackbar, clearSnackbar } = useSnackbar();
+      return {
+        randomizedSectionOptionDescription$,
+        fixedSectionOptionDescription$,
+        createSnackbar,
+        clearSnackbar,
+      };
+    },
     data() {
       return {
         quiz: {
@@ -113,10 +126,6 @@
     },
     computed: {
       ...mapState(['classList']),
-      // Removing the classSummary groupMap state mapping breaks things.
-      // Maybe it should live elsewhere?
-      /* eslint-disable-next-line kolibri/vue-no-unused-vuex-properties */
-      ...mapState('classSummary', ['groupMap', 'learnerMap']),
       selectedQuestions() {
         return this.quiz.question_sources.reduce((acc, section) => {
           acc = [...acc, ...section.questions];
@@ -137,8 +146,8 @@
       },
       orderDescriptionString() {
         return this.quizIsRandomized
-          ? this.coachString('orderRandomDescription')
-          : this.coachString('orderFixedDescription');
+          ? this.randomizedSectionOptionDescription$()
+          : this.fixedSectionOptionDescription$();
       },
       classId() {
         return this.$route.params.classId;
@@ -170,7 +179,10 @@
       },
       setCurrentAction(action) {
         if (action === 'EDIT_DETAILS') {
-          this.$router.push(this.$router.getRoute('QuizEditDetailsPage'));
+          this.$router.push({
+            name: PageNames.EXAM_CREATION_ROOT,
+            params: { ...this.$route.params, sectionIndex: 0 },
+          });
         } else {
           this.currentAction = action;
         }
@@ -179,28 +191,20 @@
         this.currentAction = '';
       },
       handleSubmitCopy({ classroomId, groupIds, adHocLearnerIds, examTitle }) {
-        const title = examTitle
-          .trim()
-          .substring(0, 50)
-          .trim();
+        const title = examTitle.trim().substring(0, 100).trim();
 
-        const className = find(this.classList, { id: classroomId }).name;
         const assignments = serverAssignmentPayload(groupIds, classroomId);
 
-        this.$store
-          .dispatch('examReport/copyExam', {
-            exam: {
-              collection: classroomId,
-              title,
-              question_count: this.quiz.question_count,
-              question_sources: this.quiz.question_sources,
-              assignments,
-              learner_ids: adHocLearnerIds,
-              date_archived: null,
-              date_activated: null,
-            },
-            className,
-          })
+        const newQuiz = {
+          title,
+          draft: true,
+          collection: classroomId,
+          assignments,
+          learner_ids: adHocLearnerIds,
+          question_sources: this.quiz.question_sources,
+        };
+
+        ExamResource.saveModel({ data: newQuiz })
           .then(result => {
             this.showSnackbarNotification('quizCopied');
             // If exam was copied to the current classroom, add it to the classSummary module
@@ -222,14 +226,15 @@
           .catch(error => {
             const caughtErrors = CatchErrors(error, [ERROR_CONSTANTS.UNIQUE]);
             if (caughtErrors) {
-              this.$store.commit('CORE_CREATE_SNACKBAR', {
+              const className = find(this.classList, { id: classroomId }).name;
+              this.createSnackbar({
                 text: this.$tr('uniqueTitleError', {
                   title,
                   className,
                 }),
                 autoDismiss: false,
                 actionText: this.coreString('closeAction'),
-                actionCallback: () => this.$store.commit('CORE_CLEAR_SNACKBAR'),
+                actionCallback: () => this.clearSnackbar(),
               });
             } else {
               this.$store.dispatch('handleApiError', { error });

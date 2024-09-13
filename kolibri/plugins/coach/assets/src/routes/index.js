@@ -1,5 +1,7 @@
 import store from 'kolibri.coreVue.vuex.store';
 import router from 'kolibri.coreVue.router';
+import useUser from 'kolibri.coreVue.composables.useUser';
+import { get } from '@vueuse/core';
 import AllFacilitiesPage from '../views/AllFacilitiesPage';
 import CoachClassListPage from '../views/CoachClassListPage';
 import ClassLearnersListPage from '../views/ClassLearnersListPage';
@@ -12,6 +14,17 @@ import { PageNames } from '../constants';
 import reportRoutes from './reportRoutes';
 import planRoutes from './planRoutes';
 import { classIdParamRequiredGuard } from './utils';
+
+function showHomePage(toRoute) {
+  const initClassInfoPromise = store.dispatch('initClassInfo', toRoute.params.classId);
+  const { isSuperuser } = useUser();
+  const getFacilitiesPromise =
+    get(isSuperuser) && store.state.core.facilities.length === 0
+      ? store.dispatch('getFacilities').catch(() => {})
+      : Promise.resolve();
+
+  return Promise.all([initClassInfoPromise, getFacilitiesPromise]);
+}
 
 export default [
   ...planRoutes,
@@ -34,7 +47,8 @@ export default [
       store.dispatch('notLoading');
       // if user only has access to one facility, facility_id will not be accessible from URL,
       // but always defaulting to userFacilityId would cause problems for multi-facility admins
-      const facilityId = toRoute.params.facility_id || store.getters.userFacilityId;
+      const { userFacilityId } = useUser();
+      const facilityId = toRoute.params.facility_id || get(userFacilityId);
       store.dispatch('setClassList', facilityId).then(
         () => {
           if (!store.getters.classListPageEnabled) {
@@ -47,7 +61,7 @@ export default [
             return;
           }
         },
-        error => store.dispatch('handleApiError', { error, reloadOnReconnect: true })
+        error => store.dispatch('handleApiError', { error, reloadOnReconnect: true }),
       );
     },
     meta: {
@@ -58,10 +72,11 @@ export default [
     name: PageNames.HOME_PAGE,
     path: '/:classId?/home',
     component: HomePage,
-    handler: (toRoute, fromRoute, next) => {
+    handler: async (toRoute, fromRoute, next) => {
       if (classIdParamRequiredGuard(toRoute, HomePage.name, next)) {
         return;
       }
+      await showHomePage(toRoute);
       store.dispatch('notLoading');
     },
     meta: {
@@ -71,7 +86,8 @@ export default [
   {
     path: '/:classId/home/activity',
     component: HomeActivityPage,
-    handler() {
+    handler: async toRoute => {
+      await showHomePage(toRoute);
       store.dispatch('notLoading');
     },
     meta: {
@@ -104,7 +120,8 @@ export default [
     path: '/',
     // Redirect to AllFacilitiesPage if a superuser and device has > 1 facility
     beforeEnter(to, from, next) {
-      if (store.getters.userIsMultiFacilityAdmin) {
+      const { userIsMultiFacilityAdmin } = useUser();
+      if (get(userIsMultiFacilityAdmin)) {
         next({ name: 'AllFacilitiesPage', replace: true });
       } else {
         next({ name: 'CoachClassListPage', replace: true });

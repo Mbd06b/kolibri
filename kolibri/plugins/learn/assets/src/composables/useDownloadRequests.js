@@ -10,6 +10,8 @@ import redirectBrowser from 'kolibri.utils.redirectBrowser';
 import urls from 'kolibri.urls';
 import client from 'kolibri.client';
 import Vue from 'kolibri.lib.vue';
+import useUser from 'kolibri.coreVue.composables.useUser';
+import useSnackbar from 'kolibri.coreVue.composables.useSnackbar';
 import { currentDeviceData } from '../composables/useDevices';
 
 const downloadRequestsTranslator = createTranslator('DownloadRequests', {
@@ -24,6 +26,10 @@ const downloadRequestsTranslator = createTranslator('DownloadRequests', {
   resourceRemoved: {
     message: 'Resource removed from my library',
     context: 'A message shown when a user has removed a resource from their library',
+  },
+  downloadComplete: {
+    message: 'Download complete',
+    context: 'A message shown to indicate that a download request has been completed',
   },
 });
 
@@ -114,6 +120,8 @@ export default function useDownloadRequests(store) {
     redirectBrowser(urls['kolibri:kolibri.plugins.learn:my_downloads']());
   }
 
+  const { createSnackbar } = useSnackbar();
+
   function addDownloadRequest(contentNode) {
     const metadata = {
       title: contentNode.title,
@@ -123,7 +131,7 @@ export default function useDownloadRequests(store) {
     const data = {
       contentnode_id: contentNode.id,
       metadata,
-      source_id: store.getters.currentUserId,
+      source_id: useUser().currentUserId.value,
       source_instance_id: get(instanceId),
       reason: 'USER_INITIATED',
       facility: store.getters.currentFacilityId,
@@ -136,7 +144,7 @@ export default function useDownloadRequests(store) {
       restartPolling();
     });
 
-    store.commit('CORE_CREATE_SNACKBAR', {
+    createSnackbar({
       text: downloadRequestsTranslator.$tr('downloadStartedLabel'),
       actionText: downloadRequestsTranslator.$tr('goToDownloadsPage'),
       actionCallback: navigateToDownloads,
@@ -145,6 +153,17 @@ export default function useDownloadRequests(store) {
       autoDismiss: true,
     });
     return Promise.resolve();
+  }
+
+  function showCompletedDownloadSnackbar() {
+    createSnackbar({
+      text: downloadRequestsTranslator.$tr('downloadComplete'),
+      actionText: downloadRequestsTranslator.$tr('goToDownloadsPage'),
+      actionCallback: navigateToDownloads,
+      backdrop: false,
+      forceReuse: true,
+      autoDismiss: true,
+    });
   }
 
   function removeDownloadRequest(contentNodeId) {
@@ -156,7 +175,7 @@ export default function useDownloadRequests(store) {
       id: contentRequest.id,
     });
     Vue.delete(downloadRequestMap, contentRequest.contentnode_id);
-    store.commit('CORE_CREATE_SNACKBAR', {
+    createSnackbar({
       text: downloadRequestsTranslator.$tr('resourceRemoved'),
       backdrop: false,
       forceReuse: true,
@@ -179,5 +198,6 @@ export default function useDownloadRequests(store) {
     loading,
     removeDownloadRequest,
     downloadRequestsTranslator,
+    showCompletedDownloadSnackbar,
   };
 }

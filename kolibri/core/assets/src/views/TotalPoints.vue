@@ -1,7 +1,14 @@
 <template>
 
-  <div v-if="isUserLoggedIn" ref="icon" class="points-wrapper">
-    <div class="icon-wrapper" :style="{ backgroundColor: $themeTokens.surface }">
+  <div
+    v-if="isUserLoggedIn"
+    ref="icon"
+    class="points-wrapper"
+  >
+    <div
+      class="icon-wrapper"
+      :style="{ backgroundColor: $themeTokens.surface }"
+    >
       <KIcon
         icon="pointsActive"
         :color="$themeTokens.primary"
@@ -23,12 +30,20 @@
 
 <script>
 
-  import { mapGetters, mapActions } from 'vuex';
+  import useUser from 'kolibri.coreVue.composables.useUser';
+  import useTotalProgress from 'kolibri.coreVue.composables.useTotalProgress';
 
   export default {
     name: 'TotalPoints',
-    computed: {
-      ...mapGetters(['totalPoints', 'currentUserId', 'isUserLoggedIn']),
+    setup() {
+      const { currentUserId, isUserLoggedIn } = useUser();
+      const { fetchPoints, totalPoints } = useTotalProgress();
+      return {
+        currentUserId,
+        isUserLoggedIn,
+        fetchPoints,
+        totalPoints,
+      };
     },
     watch: {
       currentUserId() {
@@ -37,9 +52,6 @@
     },
     created() {
       this.fetchPoints();
-    },
-    methods: {
-      ...mapActions(['fetchPoints']),
     },
     $trs: {
       pointsTooltip: {

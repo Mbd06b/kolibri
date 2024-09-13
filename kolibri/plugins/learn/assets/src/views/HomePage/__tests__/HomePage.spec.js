@@ -5,6 +5,10 @@ import Vuex from 'vuex';
 import { useDevicesWithFilter } from 'kolibri.coreVue.componentSets.sync';
 import useUser, { useUserMock } from 'kolibri.coreVue.composables.useUser';
 import useKResponsiveWindow from 'kolibri-design-system/lib/composables/useKResponsiveWindow';
+import useTotalProgress, {
+  useTotalProgressMock,
+} from 'kolibri.coreVue.composables.useTotalProgress';
+import { ref } from 'kolibri.lib.vueCompositionApi';
 import { ClassesPageNames, PageNames } from '../../../constants';
 import HomePage from '../index';
 /* eslint-disable import/named */
@@ -25,6 +29,7 @@ jest.mock('../../../composables/useContentLink');
 // Needed to test anything using mount() where children use this composable
 jest.mock('../../../composables/useLearningActivities');
 jest.mock('kolibri-design-system/lib/composables/useKResponsiveWindow');
+jest.mock('kolibri.coreVue.composables.useTotalProgress');
 
 const localVue = createLocalVue();
 localVue.use(Vuex);
@@ -106,6 +111,7 @@ describe(`HomePage`, () => {
     }));
   });
 
+  let totalProgressMock;
   beforeEach(() => {
     jest.clearAllMocks();
     // set back to default values defined in __mocks__
@@ -123,8 +129,10 @@ describe(`HomePage`, () => {
     useChannels.mockImplementation(() =>
       useChannelsMock({
         fetchChannels: jest.fn(() => Promise.resolve([{ id: 'channel-1', name: 'Channel 1' }])),
-      })
+      }),
     );
+    totalProgressMock = { totalProgress: ref(null) };
+    useTotalProgress.mockImplementation(() => useTotalProgressMock(totalProgressMock));
   });
 
   it(`smoke test`, () => {
@@ -140,7 +148,7 @@ describe(`HomePage`, () => {
 
     it(`the section is not displayed for a signed in user who has no classes and can access unassigned content`, () => {
       useDeviceSettings.mockImplementation(() =>
-        useDeviceSettingsMock({ canAccessUnassignedContent: true })
+        useDeviceSettingsMock({ canAccessUnassignedContent: true }),
       );
       useUser.mockImplementation(() => useUserMock({ isUserLoggedIn: true }));
       const wrapper = makeWrapper();
@@ -149,7 +157,7 @@ describe(`HomePage`, () => {
 
     it(`the section is displayed for a signed in user with no classes who cannot access unassigned content`, () => {
       useDeviceSettings.mockImplementation(() =>
-        useDeviceSettingsMock({ canAccessUnassignedContent: false })
+        useDeviceSettingsMock({ canAccessUnassignedContent: false }),
       );
       useUser.mockImplementation(() => useUserMock({ isUserLoggedIn: true }));
       const wrapper = makeWrapper();
@@ -164,7 +172,7 @@ describe(`HomePage`, () => {
             { id: 'class-1', name: 'Class 1' },
             { id: 'class-2', name: 'Class 2' },
           ],
-        })
+        }),
       );
       const wrapper = makeWrapper();
       const links = getClassesSection(wrapper).findAll('[data-test="classLink"]');
@@ -215,7 +223,7 @@ describe(`HomePage`, () => {
             getClassQuizLink() {
               return { path: '/class-quiz' };
             },
-          })
+          }),
         );
       });
 
@@ -232,10 +240,10 @@ describe(`HomePage`, () => {
       it(`non-classes resources in progress  are not displayed`, () => {
         const wrapper = makeWrapper();
         expect(getContinueLearningFromClassesSection(wrapper).text()).not.toContain(
-          'Non-class resource 1'
+          'Non-class resource 1',
         );
         expect(getContinueLearningFromClassesSection(wrapper).text()).not.toContain(
-          'Non-class resource 2'
+          'Non-class resource 2',
         );
       });
 
@@ -266,13 +274,13 @@ describe(`HomePage`, () => {
       useLearnerResources.mockImplementation(() =>
         useLearnerResourcesMock({
           activeClassesLessons: [
-            { id: 'lesson-1', title: 'Lesson 1', is_active: true },
-            { id: 'lesson-2', title: 'Lesson 2', is_active: true },
+            { id: 'lesson-1', title: 'Lesson 1', active: true },
+            { id: 'lesson-2', title: 'Lesson 2', active: true },
           ],
           getClassLessonLink() {
             return { path: '/class-lesson' };
           },
-        })
+        }),
       );
       const wrapper = makeWrapper();
       expect(getRecentLessonsSection(wrapper).exists()).toBe(true);
@@ -307,7 +315,7 @@ describe(`HomePage`, () => {
           getClassQuizLink() {
             return { path: '/class-quiz' };
           },
-        })
+        }),
       );
       const wrapper = makeWrapper();
       expect(getRecentQuizzesSection(wrapper).exists()).toBe(true);
@@ -343,7 +351,7 @@ describe(`HomePage`, () => {
               { id: 'non-class-resource-1', title: 'Non-class resource 1', is_leaf: true },
               { id: 'non-class-resource-2', title: 'Non-class resource 2', is_leaf: true },
             ],
-          })
+          }),
         );
       });
 
@@ -357,7 +365,7 @@ describe(`HomePage`, () => {
           useDeviceSettings.mockImplementation(() =>
             useDeviceSettingsMock({
               canAccessUnassignedContent: true,
-            })
+            }),
           );
         });
 
@@ -386,7 +394,7 @@ describe(`HomePage`, () => {
           useChannelsMock({
             localChannelsCache: channels,
             fetchChannels: jest.fn(() => Promise.resolve(channels)),
-          })
+          }),
         );
       });
 
@@ -404,7 +412,7 @@ describe(`HomePage`, () => {
         useLearnerResources.mockImplementation(() =>
           useLearnerResourcesMock({
             learnerFinishedAllClasses: true,
-          })
+          }),
         );
         const wrapper = makeWrapper();
         expect(getExploreChannelsSection(wrapper).exists()).toBe(false);
@@ -417,12 +425,12 @@ describe(`HomePage`, () => {
         useLearnerResources.mockImplementation(() =>
           useLearnerResourcesMock({
             learnerFinishedAllClasses: true,
-          })
+          }),
         );
         useDeviceSettings.mockImplementation(() =>
           useDeviceSettingsMock({
             canAccessUnassignedContent: true,
-          })
+          }),
         );
         const wrapper = makeWrapper();
         expect(getExploreChannelsSection(wrapper).exists()).toBe(true);

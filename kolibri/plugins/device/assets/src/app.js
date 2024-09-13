@@ -24,11 +24,12 @@ class DeviceManagementModule extends KolibriApp {
     return Cookies.get(IsPinAuthenticated) === 'true';
   }
   checkIfPinAuthenticationIsRequired(store, grantPluginAccess) {
-    const { isLearnerOnlyImport } = useUser();
-    const isSuperuser = store.getters.isSuperuser;
-    const isFacilityAdmin = store.getters.isFacilityAdmin;
-    const userCanManageContent = store.getters.canManageContent;
-    if (get(isLearnerOnlyImport) && !isFacilityAdmin && (isSuperuser || userCanManageContent)) {
+    const { isLearnerOnlyImport, isSuperuser, isFacilityAdmin, canManageContent } = useUser();
+    if (
+      get(isLearnerOnlyImport) &&
+      !get(isFacilityAdmin) &&
+      (get(isSuperuser) || get(canManageContent))
+    ) {
       //While browsing within the device plugin, prevent expiry.
       //On page refresh within plugin, show pin prompt if cookie has expired.
       viewPlugin = viewPlugin ? viewPlugin : this.isPinAuthenticated;
@@ -53,7 +54,7 @@ class DeviceManagementModule extends KolibriApp {
       this.store.dispatch('resetModuleState', { toRoute, fromRoute });
     });
     router.beforeResolve((to, from, next) => {
-      this.checkIfPinAuthenticationIsRequired(this.store, function() {
+      this.checkIfPinAuthenticationIsRequired(this.store, function () {
         viewPlugin = true;
         next();
       });

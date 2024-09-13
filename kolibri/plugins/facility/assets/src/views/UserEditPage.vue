@@ -1,11 +1,15 @@
 <template>
 
   <ImmersivePage
-    :route="this.$store.getters.facilityPageLinks.UserPage"
+    :route="$store.getters.facilityPageLinks.UserPage"
     :appBarTitle="coreString('usersLabel')"
   >
     <KPageContainer class="narrow-container">
-      <form v-if="!loading" class="form" @submit.prevent="submitForm">
+      <form
+        v-if="!loading"
+        class="form"
+        @submit.prevent="submitForm"
+      >
         <h1>
           {{ $tr('editUserDetailsHeader') }}
         </h1>
@@ -46,7 +50,6 @@
               :text="editingSelf ? $tr('viewInDeviceTabPrompt') : $tr('changeInDeviceTabPrompt')"
               :href="devicePermissionsPageLink"
             />
-
           </template>
 
           <template v-else>
@@ -58,7 +61,10 @@
               :options="userTypeOptions"
             />
 
-            <fieldset v-if="coachIsSelected" class="coach-selector">
+            <fieldset
+              v-if="coachIsSelected"
+              class="coach-selector"
+            >
               <KRadioButton
                 v-model="classCoachIsSelected"
                 :disabled="formDisabled"
@@ -98,33 +104,28 @@
             :facilityDatasetExtraFields="facilityConfig.extra_fields"
             :disabled="formDisabled"
           />
-
         </section>
 
         <p v-if="willBeLoggedOut">
           {{ $tr('forceLogoutWarning') }}
         </p>
         <div class="buttons">
-          <KButtonGroup style="margin-top: 8px;">
+          <KButtonGroup style="margin-top: 8px">
             <KButton
               type="submit"
               :text="coreString('saveAction')"
               :disabled="formDisabled"
-
               :primary="true"
             />
             <KButton
               :text="cancelButtonText"
               :disabled="formDisabled"
-
               @click="goToUserManagementPage()"
             />
           </KButtonGroup>
         </div>
-
       </form>
     </KPageContainer>
-
   </ImmersivePage>
 
 </template>
@@ -148,6 +149,8 @@
   import UsernameTextbox from 'kolibri.coreVue.components.UsernameTextbox';
   import commonCoreStrings from 'kolibri.coreVue.mixins.commonCoreStrings';
   import ExtraDemographics from 'kolibri-common/components/ExtraDemographics';
+  import useUser from 'kolibri.coreVue.composables.useUser';
+  import useSnackbar from 'kolibri.coreVue.composables.useSnackbar';
   import IdentifierTextbox from './IdentifierTextbox';
 
   export default {
@@ -168,6 +171,15 @@
       ExtraDemographics,
     },
     mixins: [commonCoreStrings],
+    setup() {
+      const { createSnackbar } = useSnackbar();
+      const { currentUserId } = useUser();
+
+      return {
+        createSnackbar,
+        currentUserId,
+      };
+    },
     data() {
       return {
         fullName: '',
@@ -189,7 +201,7 @@
       };
     },
     computed: {
-      ...mapGetters(['currentUserId', 'facilityConfig']),
+      ...mapGetters(['facilityConfig']),
       ...mapState('userManagement', ['facilityUsers']),
       formDisabled() {
         return this.status === 'BUSY';
@@ -300,7 +312,7 @@
       },
       usernameIsUnique(value) {
         const match = this.facilityUsers.find(
-          ({ username }) => username.toLowerCase() === value.toLowerCase()
+          ({ username }) => username.toLowerCase() === value.toLowerCase(),
         );
         if (match && match.username.toLowerCase() === this.userCopy.username.toLowerCase()) {
           return true;
@@ -321,7 +333,7 @@
           },
           (value, key) => {
             return value !== this.userCopy[key];
-          }
+          },
         );
 
         // Roles are update via a different API than FacilityUsers, so pass
@@ -363,7 +375,7 @@
           // Log out of Facility Page if and Admin demotes themselves to non-Admin
           this.$store.dispatch('kolibriLogout');
         } else {
-          this.$store.dispatch('createSnackbar', this.coreString('changesSavedNotification'));
+          this.createSnackbar(this.coreString('changesSavedNotification'));
           this.goToUserManagementPage();
         }
       },

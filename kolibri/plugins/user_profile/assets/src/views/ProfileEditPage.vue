@@ -7,8 +7,14 @@
     :appBarTitle="$tr('editProfileHeader')"
     :route="profileRoute"
   >
-    <KPageContainer class="narrow-container" :topMargin="100">
-      <form class="form" @submit.prevent="handleSubmit">
+    <KPageContainer
+      class="narrow-container"
+      :topMargin="100"
+    >
+      <form
+        class="form"
+        @submit.prevent="handleSubmit"
+      >
         <h1>{{ $tr('editProfileHeader') }}</h1>
 
         <FullNameTextbox
@@ -46,7 +52,6 @@
             :text="coreString('saveAction')"
             :disabled="formDisabled"
             type="submit"
-
             primary
           />
           <KButton
@@ -59,8 +64,7 @@
         </KButtonGroup>
       </form>
     </KPageContainer>
-
-  </Immersivepage>
+  </ImmersivePage>
 
 </template>
 
@@ -99,8 +103,8 @@
     },
     mixins: [commonCoreStrings],
     setup() {
-      const { isLearnerOnlyImport } = useUser();
-      return { isLearnerOnlyImport };
+      const { isLearnerOnlyImport, isLearner, currentUserId } = useUser();
+      return { isLearnerOnlyImport, isLearner, currentUserId };
     },
     data() {
       return {
@@ -117,7 +121,7 @@
       };
     },
     computed: {
-      ...mapGetters(['facilityConfig', 'isLearner']),
+      ...mapGetters(['facilityConfig']),
       formDisabled() {
         return this.status === 'BUSY';
       },
@@ -156,15 +160,13 @@
     methods: {
       // Have to query FacilityUser again since we don't put demographic info on the session
       setFacilityUser() {
-        FacilityUserResource.fetchModel({ id: this.$store.state.core.session.user_id }).then(
-          facilityUser => {
-            this.birthYear = facilityUser.birth_year;
-            this.gender = facilityUser.gender;
-            this.fullName = facilityUser.full_name;
-            this.username = facilityUser.username;
-            this.userCopy = { ...facilityUser };
-          }
-        );
+        FacilityUserResource.fetchModel({ id: this.currentUserId }).then(facilityUser => {
+          this.birthYear = facilityUser.birth_year;
+          this.gender = facilityUser.gender;
+          this.fullName = facilityUser.full_name;
+          this.username = facilityUser.username;
+          this.userCopy = { ...facilityUser };
+        });
       },
       getUpdates() {
         return pickBy(
@@ -176,7 +178,7 @@
           },
           (value, key) => {
             return value !== this.userCopy[key];
-          }
+          },
         );
       },
       handleCancel() {

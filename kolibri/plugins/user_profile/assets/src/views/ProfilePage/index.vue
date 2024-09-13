@@ -2,7 +2,6 @@
 
   <NotificationsRoot>
     <AppBarPage :title="coreString('profileLabel')">
-
       <KPageContainer>
         <KGrid>
           <KGridItem
@@ -25,7 +24,6 @@
               />
             </h1>
           </KGridItem>
-
         </KGrid>
 
         <table>
@@ -72,17 +70,18 @@
                 </template>
                 {{ permissionTypeText }}
               </KLabeledIcon>
-              <p>
-                {{ $tr('youCan') }}
-                <ul class="permissions-list">
-                  <li v-if="isSuperuser">
-                    {{ $tr('manageDevicePermissions') }}
-                  </li>
-                  <li v-for="(value, key) in userPermissions" :key="key">
-                    {{ getPermissionString(key) }}
-                  </li>
-                </ul>
-              </p>
+              <p>{{ $tr('youCan') }}</p>
+              <ul class="permissions-list">
+                <li v-if="isSuperuser">
+                  {{ $tr('manageDevicePermissions') }}
+                </li>
+                <li
+                  v-for="(value, key) in userPermissions"
+                  :key="key"
+                >
+                  {{ getPermissionString(key) }}
+                </li>
+              </ul>
             </td>
           </tr>
 
@@ -125,9 +124,11 @@
 
         <KGrid
           v-if="onMyOwnSetup"
-          :style="{ marginTop: '34px',
-                    paddingTop: '10px',
-                    borderTop: `1px solid ${$themeTokens.fineLine}` }"
+          :style="{
+            marginTop: '34px',
+            paddingTop: '10px',
+            borderTop: `1px solid ${$themeTokens.fineLine}`,
+          }"
         >
           <KGridItem
             :layout8="{ span: 4 }"
@@ -159,7 +160,6 @@
           </KGridItem>
         </KGrid>
 
-
         <ChangeUserPasswordModal
           v-if="!isLearnerOnlyImport && showPasswordModal"
           @cancel="showPasswordModal = false"
@@ -175,9 +175,6 @@
           <p>{{ $tr('learnModalLine1') }}</p>
           <p>{{ $tr('learnModalLine2') }}</p>
         </KModal>
-
-
-
       </KPageContainer>
     </AppBarPage>
   </NotificationsRoot>
@@ -200,6 +197,7 @@
   import useUser from 'kolibri.coreVue.composables.useUser';
   import GenderDisplayText from 'kolibri.coreVue.components.GenderDisplayText';
   import BirthYearDisplayText from 'kolibri.coreVue.components.BirthYearDisplayText';
+  import useTotalProgress from 'kolibri.coreVue.composables.useTotalProgress';
   import { RoutesMap } from '../../constants';
   import useCurrentUser from '../../composables/useCurrentUser';
   import useOnMyOwnSetup from '../../composables/useOnMyOwnSetup';
@@ -226,26 +224,35 @@
       const showPasswordModal = ref(false);
       const showLearnModal = ref(false);
       const { currentUser } = useCurrentUser();
-      const { isLearnerOnlyImport } = useUser();
+      const {
+        isLearnerOnlyImport,
+        getUserKind,
+        getUserPermissions,
+        isCoach,
+        isSuperuser,
+        userHasPermissions,
+        userFacilityId,
+      } = useUser();
       const { onMyOwnSetup } = useOnMyOwnSetup();
+      const { fetchPoints, totalPoints } = useTotalProgress();
       return {
         currentUser,
         onMyOwnSetup,
         isLearnerOnlyImport,
+        getUserKind,
+        getUserPermissions,
+        isCoach,
+        isSuperuser,
+        userHasPermissions,
+        userFacilityId,
         showLearnModal,
         showPasswordModal,
+        fetchPoints,
+        totalPoints,
       };
     },
     computed: {
-      ...mapGetters([
-        'facilityConfig',
-        'getUserKind',
-        'getUserPermissions',
-        'isCoach',
-        'isSuperuser',
-        'totalPoints',
-        'userHasPermissions',
-      ]),
+      ...mapGetters(['facilityConfig']),
       profileEditRoute() {
         return this.$router.getRoute(RoutesMap.PROFILE_EDIT);
       },
@@ -254,7 +261,7 @@
       },
       facilityName() {
         const match = find(this.$store.getters.facilities, {
-          id: this.$store.getters.userFacilityId,
+          id: this.userFacilityId,
         });
         return match ? match.name : '';
       },
@@ -282,7 +289,7 @@
       },
     },
     created() {
-      this.$store.dispatch('fetchPoints');
+      this.fetchPoints();
     },
     methods: {
       getPermissionString(permission) {

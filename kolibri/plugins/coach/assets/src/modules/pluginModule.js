@@ -1,11 +1,10 @@
 import { ClassroomResource } from 'kolibri.resources';
 import logger from 'kolibri.lib.logging';
-import { pageNameToModuleMap, PageNames } from '../constants';
+import useUser from 'kolibri.coreVue.composables.useUser';
+import { get } from '@vueuse/core';
+import { pageNameToModuleMap } from '../constants';
 import { LessonsPageNames } from '../constants/lessonsConstants';
-import examCreation from './examCreation';
-import examReport from './examReport';
 import examReportDetail from './examReportDetail';
-import examsRoot from './examsRoot';
 import exerciseDetail from './exerciseDetail';
 import groups from './groups';
 import lessonSummary from './lessonSummary';
@@ -26,6 +25,10 @@ export default {
       pageName: '',
       toolbarRoute: {},
       toolbarTitle: '',
+      channels: {
+        list: [],
+        currentId: null,
+      },
     };
   },
   mutations: {
@@ -44,6 +47,9 @@ export default {
     SET_TOOLBAR_ROUTE(state, toolbarRoute) {
       state.toolbarRoute = toolbarRoute;
     },
+    SET_CHANNEL_LIST(state, channelList) {
+      state.channels.list = channelList;
+    },
   },
   getters: {
     classListPageEnabled(state) {
@@ -52,13 +58,24 @@ export default {
       return state.classList.length !== 1;
     },
     userIsAuthorizedForCoach(state, getters, rootState) {
-      if (getters.isSuperuser) {
+      const { isAdmin, isSuperuser, isCoach, facility_id } = useUser();
+      if (get(isSuperuser)) {
         return true;
-      } else if (getters.isCoach || getters.isAdmin) {
-        return state.classSummary.facility_id === rootState.core.session.facility_id;
-      } else {
-        return false;
+      } else if (get(isCoach) || get(isAdmin)) {
+        return (
+          rootState.route.params.facilityId === get(facility_id) ||
+          !rootState.route.params.facilityId
+        );
       }
+      return false;
+    },
+    getChannels(state) {
+      return state.channels.list;
+    },
+    getChannelObject(state, getters) {
+      return function getter(channelId) {
+        return getters.getChannels(state).find(channel => channel.id === channelId);
+      };
     },
   },
   actions: {
@@ -102,9 +119,6 @@ export default {
       ) {
         return store.dispatch('lessonSummary/resetLessonSummaryState');
       }
-      if (toRoute.name === PageNames.EXAMS) {
-        return store.dispatch('examCreation/resetExamCreationState');
-      }
       const moduleName = pageNameToModuleMap[fromRoute.name];
       if (moduleName) {
         store.commit(`${moduleName}/RESET_STATE`);
@@ -136,10 +150,7 @@ export default {
   modules: {
     classSummary,
     coachNotifications,
-    examCreation,
-    examReport,
     examReportDetail,
-    examsRoot,
     exerciseDetail,
     groups,
     lessonSummary,

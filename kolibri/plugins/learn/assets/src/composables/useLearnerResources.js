@@ -11,7 +11,7 @@ import flatMap from 'lodash/flatMap';
 import flatMapDepth from 'lodash/flatMapDepth';
 
 import { ContentNodeResource } from 'kolibri.resources';
-import { deduplicateResources } from '../utils/contentNode';
+import { deduplicateResources } from 'kolibri-common/utils/contentNode';
 import { LearnerClassroomResource, LearnerLessonResource } from '../apiResources';
 import { ClassesPageNames } from '../constants';
 import useContentNodeProgress, { setContentNodeProgress } from './useContentNodeProgress';
@@ -93,9 +93,9 @@ export default function useLearnerResources() {
             lessonId: l.id,
             classId: c.id,
             contentNode: r.contentnode,
-          }))
+          })),
         ),
-      2
+      2,
     );
   });
 
@@ -161,7 +161,7 @@ export default function useLearnerResources() {
     if (!classroom || !classroom.assignments || !classroom.assignments.lessons) {
       return [];
     }
-    return classroom.assignments.lessons.filter(lesson => lesson.is_active);
+    return classroom.assignments.lessons.filter(lesson => lesson.active);
   }
 
   /**

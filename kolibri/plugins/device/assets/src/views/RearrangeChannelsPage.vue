@@ -52,7 +52,6 @@
           </transition-group>
         </DragContainer>
       </template>
-
     </KPageContainer>
   </ImmersivePage>
 
@@ -68,6 +67,8 @@
   import client from 'kolibri.client';
   import urls from 'kolibri.urls';
   import ImmersivePage from 'kolibri.coreVue.components.ImmersivePage';
+  import useUser from 'kolibri.coreVue.composables.useUser';
+  import useSnackbar from 'kolibri.coreVue.composables.useSnackbar';
   import DeviceChannelResource from '../apiResources/deviceChannel';
   import useContentTasks from '../composables/useContentTasks';
   import { PageNames } from '../constants';
@@ -88,6 +89,13 @@
     },
     setup() {
       useContentTasks();
+      const { canManageContent } = useUser();
+      const { createSnackbar } = useSnackbar();
+
+      return {
+        canManageContent,
+        createSnackbar,
+      };
     },
     data() {
       return {
@@ -108,7 +116,7 @@
       },
     },
     beforeMount() {
-      if (!this.$store.getters.canManageContent) {
+      if (!this.canManageContent) {
         return this.$router.replace(this.$router.getRoute('MANAGE_CONTENT_PAGE'));
       }
       this.fetchChannels()
@@ -151,7 +159,7 @@
         this.channels = [...event.newArray];
         this.postNewOrder(event.newArray.map(x => x.id))
           .then(() => {
-            this.$store.dispatch('createSnackbar', this.$tr('successNotification'));
+            this.createSnackbar(this.$tr('successNotification'));
           })
           .catch(() => {
             // HACK completely reset the array to undo the move on the drag list
@@ -159,7 +167,7 @@
             this.$nextTick().then(() => {
               this.channels = oldArray;
             });
-            this.$store.dispatch('createSnackbar', this.$tr('failureNotification'));
+            this.createSnackbar(this.$tr('failureNotification'));
           });
       },
     },

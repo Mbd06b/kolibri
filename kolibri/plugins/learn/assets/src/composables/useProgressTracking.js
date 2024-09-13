@@ -15,6 +15,8 @@ import Modalities from 'kolibri-constants/Modalities';
 import client from 'kolibri.client';
 import logger from 'kolibri.lib.logging';
 import urls from 'kolibri.urls';
+import useUser from 'kolibri.coreVue.composables.useUser';
+import useTotalProgress from 'kolibri.coreVue.composables.useTotalProgress';
 
 const logging = logger.getLogger(__filename);
 
@@ -45,7 +47,7 @@ function threeDecimalPlaceRoundup(num) {
 
 // Function to delay rejection to allow delayed retry behaviour
 function rejectDelay(reason, retryDelay = 5000) {
-  return new Promise(function(resolve, reject) {
+  return new Promise(function (resolve, reject) {
     setTimeout(reject.bind(null, reason), retryDelay);
   });
 }
@@ -165,7 +167,7 @@ export default function useProgressTracking(store) {
       clearObject(pastattemptMap);
       Object.assign(
         pastattemptMap,
-        data.pastattempts ? fromPairs(data.pastattempts.map(a => [a.id, a])) : {}
+        data.pastattempts ? fromPairs(data.pastattempts.map(a => [a.id, a])) : {},
       );
       set(totalattempts, valOrNull(data.totalattempts));
       unsaved_interactions.splice(0);
@@ -219,17 +221,17 @@ export default function useProgressTracking(store) {
         }
         if (!node.assessmentmetadata.mastery_model) {
           throw new TypeError(
-            'node must have assessmentmetadata property with mastery_model property'
+            'node must have assessmentmetadata property with mastery_model property',
           );
         }
         if (!isPlainObject(node.assessmentmetadata.mastery_model)) {
           throw new TypeError(
-            'node must have assessmentmetadata property with plain object mastery_model property'
+            'node must have assessmentmetadata property with plain object mastery_model property',
           );
         }
         if (!node.assessmentmetadata.mastery_model.type) {
           throw new TypeError(
-            'node must have assessmentmetadata property with mastery_model property with type property'
+            'node must have assessmentmetadata property with mastery_model property with type property',
           );
         }
         data.mastery_model = node.assessmentmetadata.mastery_model;
@@ -258,7 +260,7 @@ export default function useProgressTracking(store) {
     if (interaction.id) {
       if (!pastattemptMap[interaction.id]) {
         const nowSavedInteraction = get(pastattempts).find(
-          a => !a.id && a.item === interaction.item
+          a => !a.id && a.item === interaction.item,
         );
         Object.assign(nowSavedInteraction, interaction);
         pastattemptMap[nowSavedInteraction.id] = nowSavedInteraction;
@@ -287,8 +289,10 @@ export default function useProgressTracking(store) {
       if (response.data.complete) {
         set(complete, true);
         set(progress_state, 1);
-        if (store.getters.isUserLoggedIn && !wasComplete) {
-          store.commit('INCREMENT_TOTAL_PROGRESS', 1);
+        const { isUserLoggedIn } = useUser();
+        const { incrementTotalProgress } = useTotalProgress();
+        if (get(isUserLoggedIn) && !wasComplete) {
+          incrementTotalProgress(1);
         }
       }
       return response.data;
@@ -410,7 +414,7 @@ export default function useProgressTracking(store) {
       progress = threeDecimalPlaceRoundup(progress);
       if (get(progress_state) < progress) {
         const newProgressDelta = _zeroToOne(
-          threeDecimalPlaceRoundup(get(progress_delta) + progress - get(progress_state))
+          threeDecimalPlaceRoundup(get(progress_delta) + progress - get(progress_state)),
         );
         set(progress_delta, newProgressDelta);
         set(progress_state, progress);
@@ -424,11 +428,11 @@ export default function useProgressTracking(store) {
       progressDelta = threeDecimalPlaceRoundup(progressDelta);
       set(
         progress_delta,
-        _zeroToOne(threeDecimalPlaceRoundup(get(progress_delta) + progressDelta))
+        _zeroToOne(threeDecimalPlaceRoundup(get(progress_delta) + progressDelta)),
       );
       set(
         progress_state,
-        Math.min(threeDecimalPlaceRoundup(get(progress_state) + progressDelta), 1)
+        Math.min(threeDecimalPlaceRoundup(get(progress_state) + progressDelta), 1),
       );
     }
     if (!isUndefined(contentState)) {
@@ -449,7 +453,7 @@ export default function useProgressTracking(store) {
       unsaved_interactions.push(interaction);
       if (!interaction.id) {
         const unsavedInteraction = get(pastattempts).find(
-          a => !a.id && a.item === interaction.item
+          a => !a.id && a.item === interaction.item,
         );
         if (unsavedInteraction) {
           for (const key in interaction) {
@@ -492,7 +496,7 @@ export default function useProgressTracking(store) {
         // Otherwise update the timeout to this invocation.
         updateContentSessionTimeout = setTimeout(
           immediatelyUpdateContentSession,
-          updateContentSessionDebounceTime
+          updateContentSessionDebounceTime,
         );
       }
     });
@@ -520,7 +524,7 @@ export default function useProgressTracking(store) {
     } catch (e) {
       if (e instanceof ReferenceError && e.message === noSessionErrorText) {
         logging.debug(
-          'Tried to stop tracking progress when no content session had been initialized'
+          'Tried to stop tracking progress when no content session had been initialized',
         );
       } else {
         throw e;

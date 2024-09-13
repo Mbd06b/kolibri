@@ -17,7 +17,6 @@
       />
     </template>
     <KCircularLoader v-else />
-
   </div>
 
 </template>
@@ -25,8 +24,8 @@
 
 <script>
 
-  import { mapState, mapGetters } from 'vuex';
   import { ContentNodeKinds } from 'kolibri.coreVue.vuex.constants';
+  import useUser from 'kolibri.coreVue.composables.useUser';
   import { setContentNodeProgress } from '../../composables/useContentNodeProgress';
   import useProgressTracking from '../../composables/useProgressTracking';
   import AssessmentWrapper from '../AssessmentWrapper';
@@ -49,6 +48,7 @@
         startTrackingProgress,
         stopTrackingProgress,
       } = useProgressTracking();
+      const { currentUserId, full_name } = useUser();
       return {
         progress,
         time_spent,
@@ -60,6 +60,8 @@
         updateContentSession,
         startTracking: startTrackingProgress,
         stopTracking: stopTrackingProgress,
+        currentUserId,
+        full_name,
       };
     },
     props: {
@@ -75,10 +77,6 @@
       };
     },
     computed: {
-      ...mapGetters(['currentUserId']),
-      ...mapState({
-        fullName: state => state.core.session.full_name,
-      }),
       contentIsExercise() {
         return this.contentNode.kind === ContentNodeKinds.EXERCISE;
       },
@@ -105,7 +103,7 @@
           extraFields: this.extra_fields,
           progress: this.progress,
           userId: this.currentUserId,
-          userFullName: this.fullName,
+          userFullName: this.full_name,
           timeSpent: this.time_spent,
         };
       },
@@ -125,7 +123,7 @@
           extraFields: this.extra_fields,
           progress: this.progress,
           userId: this.currentUserId,
-          userFullName: this.fullName,
+          userFullName: this.full_name,
           timeSpent: this.time_spent,
           pastattempts: this.pastattempts,
           mastered: this.complete,

@@ -5,7 +5,7 @@
     @sort="handleDrag"
   >
     <p v-if="resources.length === 0">
-      {{ coachString('noResourcesInLessonLabel') }}
+      {{ noResourcesInLessonLabel$() }}
     </p>
     <transition-group
       v-else
@@ -23,7 +23,10 @@
             :style="{ backgroundColor: $themeTokens.surface }"
             numCols="8"
           >
-            <KFixedGridItem span="1" class="relative">
+            <KFixedGridItem
+              span="1"
+              class="relative"
+            >
               <div class="move-handle">
                 <DragSortWidget
                   :moveUpText="$tr('moveResourceUpButtonDescription')"
@@ -41,11 +44,21 @@
                   <ContentIcon :kind="resource.kind" />
                   <KRouterLink
                     :text="resource.title"
-                    :to="$router.getRoute('RESOURCE_CONTENT_PREVIEW', {
-                      contentId: resource.contentnode_id
-                    }, { last: 'LessonReportEditDetailsPage' })"
+                    :to="
+                      $router.getRoute(
+                        'RESOURCE_CONTENT_PREVIEW',
+                        {
+                          contentId: resource.contentnode_id,
+                        },
+                        { last: 'LessonReportEditDetailsPage' },
+                      )
+                    "
                   />
-                  <p dir="auto" class="channel-title" :style="{ color: $themeTokens.annotation }">
+                  <p
+                    dir="auto"
+                    class="channel-title"
+                    :style="{ color: $themeTokens.annotation }"
+                  >
                     <dfn class="visuallyhidden"> {{ $tr('parentChannelLabel') }} </dfn>
                     {{ resource.channelTitle }}
                   </p>
@@ -58,12 +71,19 @@
               </template>
               <template v-else>
                 <p>
-                  <KIcon icon="warning" :style=" { fill: $themePalette.yellow.v_1100 }" />
+                  <KIcon
+                    icon="warning"
+                    :style="{ fill: $themePalette.yellow.v_1100 }"
+                  />
                   {{ resourceMissingText }}
                 </p>
               </template>
             </KFixedGridItem>
-            <KFixedGridItem :style="{ 'padding-top': '16px' }" span="3" alignment="right">
+            <KFixedGridItem
+              :style="{ 'padding-top': '16px' }"
+              span="3"
+              alignment="right"
+            >
               <KButton
                 :text="coreString('removeAction')"
                 appearance="flat-button"
@@ -81,7 +101,7 @@
 
 <script>
 
-  import { mapActions, mapState } from 'vuex';
+  import { mapState } from 'vuex';
   import DragSortWidget from 'kolibri.coreVue.components.DragSortWidget';
   import DragContainer from 'kolibri.coreVue.components.DragContainer';
   import DragHandle from 'kolibri.coreVue.components.DragHandle';
@@ -89,6 +109,8 @@
   import ContentIcon from 'kolibri.coreVue.components.ContentIcon';
   import commonCoreStrings from 'kolibri.coreVue.mixins.commonCoreStrings';
   import CoachContentLabel from 'kolibri.coreVue.components.CoachContentLabel';
+  import useSnackbar from 'kolibri.coreVue.composables.useSnackbar';
+  import { coachStrings } from '../../common/commonCoachStrings';
 
   // This is a simplified version of ResourceListTable that is supposed to work
   // outside of the LessonSummaryPage workflow.
@@ -103,6 +125,15 @@
       CoachContentLabel,
     },
     mixins: [commonCoreStrings],
+    setup() {
+      const { createSnackbar, clearSnackbar } = useSnackbar();
+      const { noResourcesInLessonLabel$ } = coachStrings;
+      return {
+        noResourcesInLessonLabel$,
+        createSnackbar,
+        clearSnackbar,
+      };
+    },
     props: {
       // Array<{ contentnode_id, content_id, channel_id }>
       resources: {
@@ -157,7 +188,6 @@
       },
     },
     methods: {
-      ...mapActions(['clearSnackbar']),
       emitUpdatedResources(resources) {
         this.$emit('update:resources', resources);
       },
@@ -176,7 +206,7 @@
         // Need to wait for the parent to update the resources prop
         this.$nextTick(() => {
           this.firstRemovalTitle = title;
-          this.$store.commit('CORE_CREATE_SNACKBAR', {
+          this.createSnackbar({
             text: this.removalMessage,
             autoDismiss: true,
             duration: 5000,

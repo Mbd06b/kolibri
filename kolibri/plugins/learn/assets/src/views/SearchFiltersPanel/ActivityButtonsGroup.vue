@@ -11,15 +11,16 @@
     >
       <KButton
         appearance="flat-button"
-        :appearanceOverrides="isKeyActive(key)
-          ? { ...activityStyles, ...activityActiveStyles }
-          : activityStyles"
-        :disabled="availableActivities &&
-          !availableActivities[key] &&
-          !isKeyActive(key)"
+        :appearanceOverrides="
+          isKeyActive(key) ? { ...activityStyles, ...activityActiveStyles } : activityStyles
+        "
+        :disabled="availableActivities && !availableActivities[key] && !isKeyActive(key)"
         @click="$emit('input', key)"
       >
-        <KIcon :icon="activityIcon(activity)" class="activity-icon" />
+        <KIcon
+          :icon="activityIcon(activity)"
+          class="activity-icon"
+        />
         <p class="activity-button-text">
           {{ coreString(camelCase(activity)) }}
         </p>
@@ -35,13 +36,14 @@
   import camelCase from 'lodash/camelCase';
 
   import commonCoreStrings from 'kolibri.coreVue.mixins.commonCoreStrings';
-  import { injectSearch } from '../../composables/useSearch';
+  import { injectBaseSearch } from 'kolibri-common/composables/useBaseSearch';
 
   export default {
     name: 'ActivityButtonsGroup',
     mixins: [commonCoreStrings],
     setup() {
-      const { availableLearningActivities, searchableLabels, activeSearchTerms } = injectSearch();
+      const { availableLearningActivities, searchableLabels, activeSearchTerms } =
+        injectBaseSearch();
       return {
         availableLearningActivities,
         searchableLabels,
@@ -82,7 +84,7 @@
       },
       activeKeys() {
         return Object.keys(
-          (this.activeSearchTerms && this.activeSearchTerms.learning_activities) || {}
+          (this.activeSearchTerms && this.activeSearchTerms.learning_activities) || {},
         );
       },
     },
@@ -112,7 +114,7 @@
 </script>
 
 
-<style  lang="scss" scoped>
+<style lang="scss" scoped>
 
   .activity-icon {
     width: 34px;

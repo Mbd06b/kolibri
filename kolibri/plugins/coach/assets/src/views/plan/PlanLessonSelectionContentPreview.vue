@@ -2,8 +2,6 @@
 
   <CoachImmersivePage
     :appBarTitle="lessonNameLabel"
-    :authorized="userIsAuthorized"
-    authorizedRole="adminOrCoach"
     icon="back"
     :route="returnBackRoute"
     :primary="false"
@@ -19,7 +17,6 @@
         @removeResource="handleRemoveResource"
       />
     </KPageContainer>
-
   </CoachImmersivePage>
 
 </template>
@@ -30,6 +27,7 @@
   import { mapState, mapActions } from 'vuex';
   import get from 'lodash/get';
   import commonCoreStrings from 'kolibri.coreVue.mixins.commonCoreStrings';
+  import useSnackbar from 'kolibri.coreVue.composables.useSnackbar';
   import commonCoach from '../common';
   import LessonContentPreviewPage from '../plan/LessonContentPreviewPage';
   import CoachImmersivePage from '../../views/CoachImmersivePage';
@@ -42,6 +40,10 @@
       LessonContentPreviewPage,
     },
     mixins: [commonCoreStrings, commonCoach],
+    setup() {
+      const { clearSnackbar } = useSnackbar();
+      return { clearSnackbar };
+    },
     props: {
       // If set to true, will show the add/remove buttons.
       showSelectOptions: {
@@ -94,7 +96,7 @@
         }
         if (this.workingResources && this.currentContentNode && this.currentContentNode.id) {
           return this.workingResources.some(
-            resource => resource.contentnode_id === this.currentContentNode.id
+            resource => resource.contentnode_id === this.currentContentNode.id,
           );
         }
         return false;
@@ -112,7 +114,6 @@
       this.clearSnackbar();
     },
     methods: {
-      ...mapActions(['clearSnackbar']),
       ...mapActions('lessonSummary', ['addToResourceCache']),
       handleAddResource(content) {
         this.$router.push(this.returnBackRoute).then(() => {

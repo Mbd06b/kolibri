@@ -4,8 +4,8 @@
     @shouldFocusFirstEl="focusFirstEl"
     @shouldFocusLastEl="focusLastEl"
   >
-
     <KModal
+      appendToRoot
       :title="coreString('changeLanguageOption')"
       :submitText="coreString('confirmAction')"
       :cancelText="coreString('cancelAction')"
@@ -14,28 +14,28 @@
       @submit="setLang"
     >
       <KGrid>
-        <KGridItem
-          v-for="(languageCol, index) in splitLanguageOptions"
-          :key="index"
-          :class="{ 'offset-col': windowIsSmall && index === 1 }"
-          :layout8="{ span: 4 }"
-          :layout12="{ span: 6 }"
-        >
-          <KRadioButton
-            v-for="language in languageCol"
-            :key="language.id"
-            ref="languageItem"
-            v-model="selectedLanguage"
-            :buttonValue="language.id"
-            :label="language.lang_name"
-            :title="language.english_name"
-            class="language-name"
-          />
-        </KGridItem>
+        <KRadioButtonGroup>
+          <KGridItem
+            v-for="(languageCol, index) in splitLanguageOptions"
+            :key="index"
+            :class="{ 'offset-col': windowIsSmall && index === 1 }"
+            :layout8="{ span: 4 }"
+            :layout12="{ span: 6 }"
+          >
+            <KRadioButton
+              v-for="language in languageCol"
+              :key="language.id"
+              ref="languageItem"
+              v-model="selectedLanguage"
+              :buttonValue="language.id"
+              :label="language.lang_name"
+              :title="language.english_name"
+              class="language-name"
+            />
+          </KGridItem>
+        </KRadioButtonGroup>
       </KGrid>
-
     </KModal>
-
   </FocusTrap>
 
 </template>

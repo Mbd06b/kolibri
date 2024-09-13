@@ -194,3 +194,9 @@ export const Presets = Object.freeze({
   FORMAL: 'formal',
   NONFORMAL: 'nonformal',
 });
+
+// This should be kept in sync with the value in
+// kolibri/core/exams/constants.py
+export const MAX_QUESTIONS_PER_QUIZ_SECTION = 25;
+
+export const DisconnectionErrorCodes = [0, 502, 504, 511];

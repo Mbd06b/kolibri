@@ -1,6 +1,7 @@
 import { LessonResource } from 'kolibri.resources';
 import router from 'kolibri.coreVue.router';
 import { createTranslator } from 'kolibri.utils.i18n';
+import useSnackbar from 'kolibri.coreVue.composables.useSnackbar';
 import { lessonSummaryLink } from '../../routes/planLessonsRouterUtils';
 
 const translator = createTranslator('LessonRootActionTexts', {
@@ -55,18 +56,16 @@ export function fetchLessonsSizes(store, classId, shouldCommit = true) {
 
 export function createLesson(store, { classId, payload }) {
   return new Promise((resolve, reject) => {
-    const lesson_assignments = payload.assignments;
-    delete payload.assignments;
     const data = {
       ...payload,
-      lesson_assignments,
       collection: classId,
     };
     return LessonResource.saveModel({
       data,
     })
       .then(newLesson => {
-        store.dispatch('createSnackbar', translator.$tr('newLessonCreated'), { root: true });
+        const { createSnackbar } = useSnackbar();
+        createSnackbar(translator.$tr('newLessonCreated'));
         // Update the class summary now that we have a new lesson in town!
         store.dispatch('classSummary/refreshClassSummary', null, { root: true }).then(() => {
           router.push(lessonSummaryLink({ classId, lessonId: newLesson.id }));

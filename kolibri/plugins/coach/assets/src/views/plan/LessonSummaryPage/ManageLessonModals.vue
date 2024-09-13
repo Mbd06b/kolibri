@@ -32,6 +32,7 @@
   import { mapState } from 'vuex';
   import { LessonResource } from 'kolibri.resources';
   import commonCoreStrings from 'kolibri.coreVue.mixins.commonCoreStrings';
+  import useSnackbar from 'kolibri.coreVue.composables.useSnackbar';
   import AssignmentCopyModal from '../../plan/assignments/AssignmentCopyModal';
   import AssignmentDeleteModal from '../../plan/assignments/AssignmentDeleteModal';
   import { AssignmentActions } from '../../../constants/assignmentsConstants';
@@ -44,12 +45,16 @@
       AssignmentDeleteModal,
     },
     mixins: [coachStringsMixin, commonCoreStrings],
+    setup() {
+      const { createSnackbar, clearSnackbar } = useSnackbar();
+      return { createSnackbar, clearSnackbar };
+    },
     props: {
       // Should be 'COPY' or 'DELETE'
       currentAction: {
         type: String,
         required: true,
-        validator: function(value) {
+        validator: function (value) {
           return ['', 'COPY', 'DELETE'].includes(value.toUpperCase());
         },
       },
@@ -71,7 +76,7 @@
       handleSubmitCopy(selectedClassroomId, selectedCollectionIds, adHocLearnerIds) {
         const title = this.$tr('copyOfLesson', { lessonTitle: this.currentLesson.title }).substring(
           0,
-          50
+          50,
         );
         const classroomName = find(this.classList, { id: selectedClassroomId }).name;
 
@@ -81,7 +86,7 @@
             description: this.currentLesson.description,
             resources: this.currentLesson.resources,
             collection: selectedClassroomId,
-            lesson_assignments: selectedCollectionIds,
+            assignments: selectedCollectionIds,
             learner_ids: adHocLearnerIds,
           },
         })
@@ -96,14 +101,14 @@
           .catch(error => {
             const caughtErrors = CatchErrors(error, [ERROR_CONSTANTS.UNIQUE]);
             if (caughtErrors) {
-              this.$store.commit('CORE_CREATE_SNACKBAR', {
+              this.createSnackbar({
                 text: this.$tr('uniqueTitleError', {
                   title,
                   className: classroomName,
                 }),
                 autoDismiss: false,
                 actionText: this.coreString('closeAction'),
-                actionCallback: () => this.$store.commit('CORE_CLEAR_SNACKBAR'),
+                actionCallback: () => this.clearSnackbar(),
               });
             } else {
               this.$store.dispatch('handleApiError', { error });
@@ -119,7 +124,7 @@
               this.$router.getRoute('PLAN_LESSONS_ROOT', { classId: this.classId }),
               () => {
                 this.showSnackbarNotification('lessonDeleted');
-              }
+              },
             );
           })
           .catch(error => {
